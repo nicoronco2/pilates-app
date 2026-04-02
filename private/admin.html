@@ -235,8 +235,9 @@ async function confirmarAsistencia() {
     ...opcionesFetch,
     body: JSON.stringify({ dni })
   });
-  alert(await res.text());
-  await cargarReservas();
+  const text = await res.text();
+  alert(text);
+  if (res.ok) await cargarReservas();
 }
 
 function cambiarSemana(valor) {

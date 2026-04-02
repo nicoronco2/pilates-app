@@ -291,10 +291,25 @@ app.get("/horarios-disponibles", requireAdmin, async (req, res) => {
 ===================================================== */
 
 app.post("/asistencia", requireAdmin, async (req, res) => {
-  const { dni } = req.body;
+  const { dni, hora } = req.body;
   if (!dni) return res.status(400).send("DNI requerido");
-  await pool.query("UPDATE reservas SET asistida=1 WHERE dni=$1 AND asistida=0", [dni]);
-  return res.send("Asistencia registrada");
+
+  const hoy = new Date();
+  const yyyy = hoy.getFullYear();
+  const mm = String(hoy.getMonth() + 1).padStart(2, "0");
+  const dd = String(hoy.getDate()).padStart(2, "0");
+  const fechaHoy = `${yyyy}-${mm}-${dd}`;   // coincide con el formato que usás en reservas
+
+  const result = await pool.query(
+    "UPDATE reservas SET asistida=1 WHERE dni=$1 AND hora=$2 AND asistida=0 AND dia=$3",
+    [dni, hora, fechaHoy]
+  );
+
+  if (result.rowCount === 0) {
+    return res.status(400).send("No hay clases pendientes de hoy para este DNI");
+  }
+
+  return res.send("Asistencia registrada correctamente");
 });
 
 app.post("/reprogramar", requireAdmin, async (req, res) => {

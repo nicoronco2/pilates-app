@@ -148,44 +148,18 @@ const horarios = [
 
 async function cargarReservas() {
 
-    const res = await fetch("/reservas", {
-    credentials: "include"
-    });
+    const r = await fetch("/reservas", { credentials: "include" });
+    if (r.status === 401 || r.status === 403) return window.location = "/login";
+    const datos = await r.json();
 
-    if (res.status === 401 || res.status === 403) {
-        window.location.href = "/login";
-        return;
-    }
-
-    const datos = await res.json();
-
-    const tabla = document.getElementById("tabla");
-    tabla.innerHTML = "";
-
+    // reconstruir clientesGlobal sin crash
     clientesGlobal = {};
-
-    datos.forEach(r => {
-        if (!clientesGlobal[r.dni]) clientesGlobal[r.dni] = [];
-        clientesGlobal[r.dni].push(r);
+    datos.forEach(item => {
+        if (!clientesGlobal[item.dni]) clientesGlobal[item.dni] = [];
+        clientesGlobal[item.dni].push(item);
     });
 
-    Object.values(clientesGlobal).forEach(lista => {
-
-        const c = lista[0];
-        const restantes = lista.filter(x => x.asistida == 0).length;
-
-        tabla.innerHTML += `
-        <tr>
-            <td>${c.nombre}</td>
-            <td>${c.dni}</td>
-            <td>${c.telefono}</td>
-            <td>${c.pack}</td>
-            <td><button class="btn btn-sm btn-outline-primary" onclick='mostrarClases("${c.dni}")'>Ver clases</button></td>
-            <td>${restantes}</td>
-            <td></td>
-        </tr>
-        `;
-    });
+    // pintar tabla/calendario...
 }
 
 /* ================= CALENDARIO ================= */

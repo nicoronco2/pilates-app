@@ -28,7 +28,7 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       "default-src": ["'self'"],
-      "script-src": ["'self'", "https://cdn.jsdelivr.net"],
+      "script-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],  // <<< esto
       "style-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],
       "connect-src": ["'self'"],
       "img-src": ["'self'", "data:"],
@@ -258,6 +258,7 @@ app.post("/reservar", async (req, res) => {
 app.get("/reservas", requireAdmin, async (req, res) => {
     try {
         const result = await pool.query("SELECT * FROM reservas ORDER BY dia ASC");
+        console.log("reservas count", result.rows.length);
         res.json(result.rows);
     } catch (err) {
         console.error("/reservas error:", err.message);
@@ -269,7 +270,7 @@ app.get("/reservas", requireAdmin, async (req, res) => {
    HORARIOS
 ===================================================== */
 
-app.get("/horarios-disponibles", async (req, res) => {
+app.get("/horarios-disponibles", requireAdmin, async (req, res) => {
 
     const fecha = req.query.fecha;
 

@@ -1,6 +1,6 @@
 const express = require("express");
-const session = require("express-session");
 const path = require("path");
+const session = require("express-session");
 const bcrypt = require("bcrypt");
 require("dotenv").config();
 const validator = require("validator");
@@ -29,11 +29,10 @@ app.use(helmet({
     directives: {
       "default-src": ["'self'"],
       "script-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],
-      "script-src-attr": ["'unsafe-inline'"],
       "style-src": ["'self'", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com", "'unsafe-inline'"],
-      "connect-src": ["'self'"],
+      "font-src": ["'self'", "https://fonts.gstatic.com"],
       "img-src": ["'self'", "data:", "https://images.unsplash.com"],
-      "font-src": ["'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com"]
+      "connect-src": ["'self'"]
     }
   }
 }));
@@ -48,7 +47,8 @@ app.use(helmet({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(express.static("public"));  // ← AGREGA ESTA LÍNEA
+// servir /public
+app.use(express.static(path.join(__dirname, "public")));
 
 const isProduction = process.env.NODE_ENV === "production";
 

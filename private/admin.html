@@ -3,6 +3,7 @@
 <head>
     <title>Panel de reservas</title>
 
+    <!-- BOOTSTRAP -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
@@ -13,8 +14,8 @@
             .btn{ font-size:13px; }
         }
     </style>
-</head>
 
+</head>
 <body class="bg-light">
 
 <div class="container-fluid py-4 px-3 px-md-4">
@@ -24,90 +25,111 @@
     <h1 class="m-0">Panel de reservas</h1>
 
     <div class="d-flex gap-2">
-        <a href="/reservar.html" class="btn btn-primary">Nueva reserva</a>
-        <a href="/logout" class="btn btn-danger">Cerrar sesión</a>
+        <!-- BOTÓN NUEVO -->
+        <a href="/reservar.html" class="btn btn-primary">
+            Nueva reserva
+        </a>
+
+        <a href="/logout" class="btn btn-danger">
+            Cerrar sesión
+        </a>
     </div>
 
 </div>
 
-<!-- BUSCAR CLIENTE -->
+<!-- ================= BUSCAR CLIENTE ================= -->
+
 <div class="card shadow-sm mb-4">
-<div class="card-body">
+    <div class="card-body">
 
-<h4 class="mb-3">Registrar asistencia</h4>
+        <h4 class="mb-3">Registrar asistencia</h4>
 
-<div class="row g-2 align-items-end">
-    <div class="col-12 col-md-5">
-        <input type="text" id="dniInput" class="form-control" placeholder="Ingresar DNI del cliente">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-5">
+                <input type="text" id="dniInput" class="form-control" placeholder="Ingresar DNI del cliente">
+            </div>
+
+            <div class="col-12 col-md-3">
+                <button onclick="buscarCliente()" class="btn btn-primary w-100">
+                    Buscar cliente
+                </button>
+            </div>
+        </div>
+
+        <div id="infoCliente" class="mt-3"></div>
+
+        <button id="btnAsistencia"
+                class="btn btn-success mt-3 w-100 w-md-auto"
+                style="display:none;"
+                onclick="confirmarAsistencia()">
+            Confirmar asistencia de hoy
+        </button>
+
+        <div id="clienteBuscadoTabla" class="mt-4"></div>
+
+        <div id="panelClasesBuscado" class="mt-4"></div>
+
     </div>
-
-    <div class="col-12 col-md-3">
-        <button onclick="buscarCliente()" class="btn btn-primary w-100">Buscar cliente</button>
-    </div>
 </div>
 
-<div id="infoCliente" class="mt-3"></div>
+<!-- ================= CALENDARIO ================= -->
 
-<button id="btnAsistencia"
-        class="btn btn-success mt-3 w-100"
-        style="display:none;"
-        onclick="confirmarAsistencia()">
-    Confirmar asistencia de hoy
-</button>
-
-<div id="clienteBuscadoTabla" class="mt-4"></div>
-<div id="panelClasesBuscado" class="mt-4"></div>
-
-</div>
-</div>
-
-<!-- CALENDARIO -->
 <div class="card shadow-sm mb-4">
-<div class="card-body">
+    <div class="card-body">
 
-<h4 class="mb-3">Calendario semanal</h4>
+        <h4 class="mb-3">Calendario semanal</h4>
 
-<div class="d-flex gap-2 mb-3">
-    <button onclick="cambiarSemana(-1)" class="btn btn-outline-secondary">Semana anterior</button>
-    <button onclick="irSemanaActual()" class="btn btn-outline-dark">Semana actual</button>
-    <button onclick="cambiarSemana(1)" class="btn btn-outline-secondary">Semana siguiente</button>
+        <div class="d-flex flex-column flex-md-row gap-2 mb-3">
+            <button onclick="cambiarSemana(-1)" class="btn btn-outline-secondary w-100 w-md-auto">
+                Semana anterior
+            </button>
+
+            <button onclick="irSemanaActual()" class="btn btn-outline-dark w-100 w-md-auto">
+                Semana actual
+            </button>
+
+            <button onclick="cambiarSemana(1)" class="btn btn-outline-secondary w-100 w-md-auto">
+                Semana siguiente
+            </button>
+        </div>
+
+        <h5 id="tituloSemana" class="mb-3 text-center text-md-start"></h5>
+
+        <div class="table-responsive">
+            <table class="table table-bordered text-center align-middle" id="tablaCalendario"></table>
+        </div>
+
+    </div>
 </div>
 
-<h5 id="tituloSemana"></h5>
+<!-- ================= TABLA GENERAL ================= -->
 
-<div class="table-responsive">
-    <table class="table table-bordered text-center" id="tablaCalendario"></table>
-</div>
-
-</div>
-</div>
-
-<!-- TABLA -->
 <div class="card shadow-sm">
-<div class="card-body">
+    <div class="card-body">
 
-<h4 class="mb-3">Clientes registrados</h4>
+        <h4 class="mb-3">Clientes registrados</h4>
 
-<div class="table-responsive">
-<table class="table table-striped table-hover">
-<thead class="table-dark">
-<tr>
-<th>Nombre</th>
-<th>DNI</th>
-<th>Teléfono</th>
-<th>Pack</th>
-<th>Clases</th>
-<th>Restantes</th>
-<th></th>
-</tr>
-</thead>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
 
-<tbody id="tabla"></tbody>
+                <thead class="table-dark">
+                    <tr>
+                        <th>Nombre</th>
+                        <th>DNI</th>
+                        <th>Teléfono</th>
+                        <th>Pack</th>
+                        <th>Clases</th>
+                        <th>Restantes</th>
+                        <th>Recordatorio</th>
+                    </tr>
+                </thead>
 
-</table>
-</div>
+                <tbody id="tabla"></tbody>
 
-</div>
+            </table>
+        </div>
+
+    </div>
 </div>
 
 </div>
@@ -118,62 +140,50 @@ let clientesGlobal = {};
 let semanaOffset = 0;
 
 const horarios = [
-"08:00","09:00","10:00","11:00",
-"16:00","17:00","18:00","19:00"
+    "08:00","09:00","10:00","11:00",
+    "16:00","17:00","18:00","19:00"
 ];
 
-/* ================= CARGAR RESERVAS ================= */
+/* ================= PROTECCIÓN ================= */
 
 async function cargarReservas() {
 
-    try {
+    const res = await fetch("/reservas");
 
-        const res = await fetch("/reservas", {
-            credentials: "include"
-        });
-
-        console.log("STATUS:", res.status);
-
-        if (!res.ok) {
-            console.log("No autorizado → redirigiendo");
-            window.location.href = "/login";
-            return;
-        }
-
-        const datos = await res.json();
-        console.log("DATOS:", datos);
-
-        const tabla = document.getElementById("tabla");
-        tabla.innerHTML = "";
-
-        clientesGlobal = {};
-
-        datos.forEach(r => {
-            if (!clientesGlobal[r.dni]) clientesGlobal[r.dni] = [];
-            clientesGlobal[r.dni].push(r);
-        });
-
-        Object.values(clientesGlobal).forEach(lista => {
-
-            const c = lista[0];
-            const restantes = lista.filter(x => x.asistida == 0).length;
-
-            tabla.innerHTML += `
-            <tr>
-                <td>${c.nombre}</td>
-                <td>${c.dni}</td>
-                <td>${c.telefono}</td>
-                <td>${c.pack}</td>
-                <td><button class="btn btn-sm btn-outline-primary" onclick='mostrarClases("${c.dni}")'>Ver clases</button></td>
-                <td>${restantes}</td>
-                <td></td>
-            </tr>
-            `;
-        });
-
-    } catch (e) {
-        console.error("Error cargando reservas", e);
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = "/login";
+        return;
     }
+
+    const datos = await res.json();
+
+    const tabla = document.getElementById("tabla");
+    tabla.innerHTML = "";
+
+    clientesGlobal = {};
+
+    datos.forEach(r => {
+        if (!clientesGlobal[r.dni]) clientesGlobal[r.dni] = [];
+        clientesGlobal[r.dni].push(r);
+    });
+
+    Object.values(clientesGlobal).forEach(lista => {
+
+        const c = lista[0];
+        const restantes = lista.filter(x => x.asistida == 0).length;
+
+        tabla.innerHTML += `
+        <tr>
+            <td>${c.nombre}</td>
+            <td>${c.dni}</td>
+            <td>${c.telefono}</td>
+            <td>${c.pack}</td>
+            <td><button class="btn btn-sm btn-outline-primary" onclick='mostrarClases("${c.dni}")'>Ver clases</button></td>
+            <td>${restantes}</td>
+            <td></td>
+        </tr>
+        `;
+    });
 }
 
 /* ================= CALENDARIO ================= */
@@ -181,48 +191,47 @@ async function cargarReservas() {
 function obtenerLunes() {
     const hoy = new Date();
     hoy.setDate(hoy.getDate() + (semanaOffset * 7));
+
     const dia = hoy.getDay();
     const lunes = new Date(hoy);
     lunes.setDate(hoy.getDate() - (dia === 0 ? 6 : dia - 1));
+
     return lunes;
 }
 
 async function cargarCalendario() {
 
-    try {
+    const res = await fetch("/reservas");
 
-        const res = await fetch("/reservas", {
-            credentials: "include"
-        });
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = "/login";
+        return;
+    }
 
-        if (!res.ok) {
-            window.location.href = "/login";
-            return;
-        }
+    const datos = await res.json();
 
-        const datos = await res.json();
-        const lunes = obtenerLunes();
+    const lunes = obtenerLunes();
 
-        const dias = [];
+    const dias = [];
 
-        for (let i = 0; i < 5; i++) {
-            const d = new Date(lunes);
-            d.setDate(lunes.getDate() + i);
+    for (let i = 0; i < 5; i++) {
+        const d = new Date(lunes);
+        d.setDate(lunes.getDate() + i);
 
-            const fecha =
-                d.getFullYear() + "-" +
-                String(d.getMonth()+1).padStart(2,"0") + "-" +
-                String(d.getDate()).padStart(2,"0");
+        const fecha =
+            d.getFullYear() + "-" +
+            String(d.getMonth()+1).padStart(2,"0") + "-" +
+            String(d.getDate()).padStart(2,"0");
 
-            dias.push(fecha);
-        }
+        dias.push(fecha);
+    }
 
-        document.getElementById("tituloSemana").innerText =
-            "Semana del " + dias[0] + " al " + dias[4];
+    document.getElementById("tituloSemana").innerText =
+        "Semana del " + dias[0] + " al " + dias[4];
 
-        const tabla = document.getElementById("tablaCalendario");
+    const tabla = document.getElementById("tablaCalendario");
 
-        tabla.innerHTML = `
+    tabla.innerHTML = `
         <tr>
             <th>Hora</th>
             <th>Lunes</th>
@@ -231,41 +240,40 @@ async function cargarCalendario() {
             <th>Jueves</th>
             <th>Viernes</th>
         </tr>
-        `;
+    `;
 
-        horarios.forEach(hora => {
+    horarios.forEach(hora => {
 
-            let fila = `<tr><td><b>${hora}</b></td>`;
+        let fila = `<tr><td><b>${hora}</b></td>`;
 
-            dias.forEach(dia => {
+        dias.forEach(dia => {
 
-                const personas = datos
-                    .filter(r => r.dia === dia && r.hora === hora)
-                    .slice(0, 4);
+            const personas = datos
+                .filter(r => r.dia === dia && r.hora === hora)
+                .slice(0, 4);
 
-                let contenido = "";
+            let contenido = "";
 
-                personas.forEach(p => {
+            personas.forEach(p => {
 
-                    let color = p.asistida == 1 ? "bg-success" : "bg-warning";
+                let color = "bg-secondary";
 
-                    contenido += `
-                    <div class="${color} text-white rounded p-1 mb-1 small">
-                        ${p.nombre}
-                    </div>
-                    `;
-                });
+                if (p.asistida == 1) color = "bg-success";
+                if (p.asistida == 0) color = "bg-warning";
 
-                fila += `<td>${contenido}</td>`;
+                contenido += `
+                <div class="${color} text-white rounded p-1 mb-1 small">
+                    ${p.nombre}
+                </div>
+                `;
             });
 
-            fila += "</tr>";
-            tabla.innerHTML += fila;
+            fila += `<td>${contenido}</td>`;
         });
 
-    } catch (e) {
-        console.error("Error calendario", e);
-    }
+        fila += "</tr>";
+        tabla.innerHTML += fila;
+    });
 }
 
 /* ================= ASISTENCIA ================= */
@@ -276,7 +284,6 @@ async function confirmarAsistencia() {
 
     const res = await fetch("/asistencia", {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dni })
     });
@@ -284,11 +291,148 @@ async function confirmarAsistencia() {
     const msg = await res.text();
     alert(msg);
 
-    cargarReservas();
+    await cargarReservas();
     cargarCalendario();
 }
 
-/* ================= INIT ================= */
+
+
+function cambiarSemana(valor) {
+    semanaOffset += valor;
+    cargarCalendario();
+}
+
+function irSemanaActual() {
+    semanaOffset = 0;
+    cargarCalendario();
+}
+
+async function buscarCliente() {
+
+    const dni = document.getElementById("dniInput").value;
+
+    const res = await fetch("/reservas");
+
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = "/login";
+        return;
+    }
+
+    const datos = await res.json();
+
+    const lista = datos.filter(x => x.dni == dni);
+
+    if (lista.length === 0) {
+        document.getElementById("infoCliente").innerHTML = "Cliente no encontrado";
+        document.getElementById("btnAsistencia").style.display = "none";
+        document.getElementById("clienteBuscadoTabla").innerHTML = "";
+        return;
+    }
+
+    const cliente = lista[0];
+    const restantes = lista.filter(x => x.asistida == 0).length;
+
+    document.getElementById("infoCliente").innerHTML = `
+        <strong>Nombre:</strong> ${cliente.nombre} <br>
+        <strong>Clases restantes:</strong> ${restantes}
+    `;
+
+    document.getElementById("btnAsistencia").style.display = "block";
+
+    document.getElementById("clienteBuscadoTabla").innerHTML = `
+    <div class="table-responsive mt-3">
+        <table class="table table-bordered">
+            <tr>
+                <th>Nombre</th>
+                <th>DNI</th>
+                <th>Teléfono</th>
+                <th>Pack</th>
+                <th>Clases</th>
+                <th>Restantes</th>
+            </tr>
+            <tr class="table-light">
+                <td>${cliente.nombre}</td>
+                <td>${cliente.dni}</td>
+                <td>${cliente.telefono}</td>
+                <td>${cliente.pack}</td>
+                <td><button class="btn btn-sm btn-outline-primary" onclick='mostrarClases("${cliente.dni}")'>Ver clases</button></td>
+                <td>${restantes}</td>
+            </tr>
+        </table>
+    </div>
+    `;
+}
+
+function mostrarClases(dni) {
+
+    const lista = clientesGlobal[dni];
+    const panel = document.getElementById("panelClasesBuscado");
+
+    if (!lista) return;
+
+    lista.sort((a, b) => new Date(a.dia) - new Date(b.dia));
+
+    let html = "<h5 class='mb-3'>Clases del cliente</h5>";
+
+    lista.forEach(c => {
+
+        const partes = c.dia.split("-");
+        const fecha = partes[2] + "/" + partes[1] + "/" + partes[0];
+
+        let color = "bg-warning";
+        if (c.asistida == 1) color = "bg-success";
+
+        html += `
+        <div class="card mb-2">
+            <div class="card-body p-2">
+
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+                    <div class="${color} text-white rounded p-1 px-2 small">
+                        ${fecha} - ${c.hora}
+                    </div>
+
+                    <button class="btn btn-sm btn-outline-secondary"
+                        onclick="reprogramarClase(${c.id})">
+                        Reprogramar
+                    </button>
+
+                </div>
+
+            </div>
+        </div>
+        `;
+    });
+
+    panel.innerHTML = html;
+}
+
+async function reprogramarClase(id) {
+
+    const nuevoDia = prompt("Ingresá nueva fecha (YYYY-MM-DD):");
+    if (!nuevoDia) return;
+
+    const nuevaHora = prompt("Ingresá nueva hora (ej: 10:00):");
+    if (!nuevaHora) return;
+
+    const res = await fetch("/reprogramar", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            id,
+            nuevoDia,
+            nuevaHora
+        })
+    });
+
+    const msg = await res.text();
+    alert(msg);
+
+    await cargarReservas();
+    cargarCalendario();
+}
 
 cargarReservas();
 cargarCalendario();

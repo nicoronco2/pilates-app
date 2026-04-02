@@ -187,7 +187,8 @@ app.get("/admin", (req, res) => {
 });
 
 app.get("/admin.html", (req, res) => {
-    res.redirect("/login");
+    // opcional por compatibilidad URL
+    return res.redirect("/admin");
 });
 
 /* =====================================================

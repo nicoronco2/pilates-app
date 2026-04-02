@@ -148,7 +148,9 @@ const horarios = [
 
 async function cargarReservas() {
 
-    const res = await fetch("/reservas");
+    const res = await fetch("/reservas", {
+    credentials: "include"
+    });
 
     if (res.status === 401 || res.status === 403) {
         window.location.href = "/login";
@@ -201,7 +203,9 @@ function obtenerLunes() {
 
 async function cargarCalendario() {
 
-    const res = await fetch("/reservas");
+    const res = await fetch("/reservas", {
+    credentials: "include"
+    });
 
     if (res.status === 401 || res.status === 403) {
         window.location.href = "/login";
@@ -284,6 +288,7 @@ async function confirmarAsistencia() {
 
     const res = await fetch("/asistencia", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dni })
     });
@@ -311,7 +316,9 @@ async function buscarCliente() {
 
     const dni = document.getElementById("dniInput").value;
 
-    const res = await fetch("/reservas");
+    const res = await fetch("/reservas", {
+    credentials: "include"
+    });
 
     if (res.status === 401 || res.status === 403) {
         window.location.href = "/login";
@@ -417,6 +424,7 @@ async function reprogramarClase(id) {
 
     const res = await fetch("/reprogramar", {
         method: "POST",
+        credentials: "include",
         headers: {
             "Content-Type": "application/json"
         },

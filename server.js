@@ -51,7 +51,7 @@ app.use(session({
     cookie: {
         httpOnly: true,
         secure: isProduction, // 🔥 SOLO en producción
-        sameSite: isProduction ? "none" : "lax",
+        sameSite: "lax",
         maxAge: 1000 * 60 * 60
     }
 }));

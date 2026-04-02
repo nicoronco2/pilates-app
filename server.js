@@ -30,10 +30,10 @@ app.use(helmet({
       "default-src": ["'self'"],
       "script-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],
       "script-src-attr": ["'unsafe-inline'"],
-      "style-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],
+      "style-src": ["'self'", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com", "'unsafe-inline'"],
       "connect-src": ["'self'"],
-      "img-src": ["'self'", "data:"],
-      "font-src": ["'self'", "https://cdn.jsdelivr.net"]
+      "img-src": ["'self'", "data:", "https://images.unsplash.com"],
+      "font-src": ["'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com"]
     }
   }
 }));

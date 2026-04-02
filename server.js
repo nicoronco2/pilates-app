@@ -48,6 +48,8 @@ app.use(helmet({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use(express.static("public"));  // ← AGREGA ESTA LÍNEA
+
 const isProduction = process.env.NODE_ENV === "production";
 
 // HTTPS obligatorio en producción

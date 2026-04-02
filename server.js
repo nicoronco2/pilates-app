@@ -298,12 +298,20 @@ app.post("/asistencia", requireAdmin, async (req, res) => {
   const yyyy = hoy.getFullYear();
   const mm = String(hoy.getMonth() + 1).padStart(2, "0");
   const dd = String(hoy.getDate()).padStart(2, "0");
-  const fechaHoy = `${yyyy}-${mm}-${dd}`;   // coincide con el formato que usás en reservas
+  const fechaHoy = `${yyyy}-${mm}-${dd}`;
 
-  const result = await pool.query(
-    "UPDATE reservas SET asistida=1 WHERE dni=$1 AND hora=$2 AND asistida=0 AND dia=$3",
-    [dni, hora, fechaHoy]
-  );
+  let result;
+  if (hora) {
+    result = await pool.query(
+      "UPDATE reservas SET asistida = 1 WHERE dni = $1 AND hora = $2 AND asistida = 0 AND dia = $3",
+      [dni, hora, fechaHoy]
+    );
+  } else {
+    result = await pool.query(
+      "UPDATE reservas SET asistida = 1 WHERE dni = $1 AND asistida = 0 AND dia = $2",
+      [dni, fechaHoy]
+    );
+  }
 
   if (result.rowCount === 0) {
     return res.status(400).send("No hay clases pendientes de hoy para este DNI");

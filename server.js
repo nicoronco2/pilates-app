@@ -42,6 +42,8 @@ app.use((req, res, next) => {
     next();
 });
 
+app.set("trust proxy", 1);
+
 app.use(session({
     name: "pilates-session",
     secret: process.env.SESSION_SECRET,
@@ -50,6 +52,7 @@ app.use(session({
     cookie: {
         httpOnly: true,
         secure: isProduction,
+        sameSite: "lax",
         maxAge: 1000 * 60 * 60
     }
 }));

@@ -144,54 +144,49 @@ const horarios = [
     "16:00","17:00","18:00","19:00"
 ];
 
-/* ================= PROTECCIÓN ================= */
+const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
 
 async function cargarReservas() {
+  const r = await fetch("/reservas", { ...opcionesFetch });
+  if (r.status === 401 || r.status === 403) return window.location = "/login";
+  const datos = await r.json();
 
-    const r = await fetch("/reservas", { credentials: "include" });
-    if (r.status === 401 || r.status === 403) return window.location = "/login";
-    const datos = await r.json();
+  clientesGlobal = {};
+  datos.forEach(r => {
+    if (!clientesGlobal[r.dni]) clientesGlobal[r.dni] = [];
+    clientesGlobal[r.dni].push(r);
+  });
 
-    // reconstruir clientesGlobal sin crash
-    clientesGlobal = {};
-    datos.forEach(item => {
-        if (!clientesGlobal[item.dni]) clientesGlobal[item.dni] = [];
-        clientesGlobal[item.dni].push(item);
-    });
-
-    pintarClientes();
+  pintarClientes();
+  await cargarCalendario();
 }
 
 function pintarClientes() {
-    const t = document.getElementById("tabla");
-    if (!t) return;
+  const tabla = document.getElementById("clientesTablaBody");
+  if (!tabla) return;
+  tabla.innerHTML = "";
 
-    const dnis = Object.keys(clientesGlobal).sort((a,b) => a.localeCompare(b));
-    if (dnis.length === 0) {
-        t.innerHTML = `<tr><td colspan="7">No hay clientes registrados</td></tr>`;
-        return;
-    }
+  const keys = Object.keys(clientesGlobal).sort();
+  if (keys.length === 0) {
+    tabla.innerHTML = "<tr><td colspan='7'>No hay clientes</td></tr>";
+    return;
+  }
 
-    t.innerHTML = "";
-    dnis.forEach(dni => {
-        const reservas = clientesGlobal[dni];
-        const c = reservas[0];
-        const restantes = reservas.filter(r => r.asistida == 0).length;
-        const clasesList = reservas
-            .map(r => `${r.dia} / ${r.hora} ${r.asistida==1?'(OK)':''}`)
-            .join("<br>");
-
-        t.innerHTML += `
-        <tr>
-            <td>${c.nombre}</td>
-            <td>${c.dni}</td>
-            <td>${c.telefono}</td>
-            <td>${c.pack}</td>
-            <td>${clasesList}</td>
-            <td>${restantes}</td>
-            <td><button class="btn btn-sm btn-outline-secondary" onclick='mostrarClases("${c.dni}")'>Ver clases</button></td>
-        </tr>`;
-    });
+  keys.forEach(dni => {
+    const lista = clientesGlobal[dni];
+    const cli = lista[0];
+    const restantes = lista.filter(r => r.asistida === 0).length;
+    tabla.innerHTML += `
+      <tr>
+        <td>${cli.nombre}</td>
+        <td>${cli.dni}</td>
+        <td>${cli.telefono}</td>
+        <td>${cli.pack}</td>
+        <td>${lista.length}</td>
+        <td>${restantes}</td>
+        <td><button class="btn btn-sm btn-primary" onclick="mostrarClases('${dni}')">Info</button></td>
+      </tr>`;
+  });
 }
 
 /* ================= CALENDARIO ================= */
@@ -356,6 +351,17 @@ async function buscarCliente() {
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    await cargarReservas();
+    // si cargarReservas llama a cargarCalendario, no hace falta otra vez
+  } catch (err) {
+    console.error("Error iniciar admin", err);
+  }
+});
+</script>
 
 </body>
 </html>

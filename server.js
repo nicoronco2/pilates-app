@@ -181,14 +181,20 @@ app.post("/login", async (req, res) => {
    ADMIN
 ===================================================== */
 
-app.get("/admin", (req, res) => {
-    if (!req.session.admin) return res.redirect("/login");
-    res.sendFile(path.join(__dirname, "private/admin.html"));
+function requireAdmin(req, res, next) {
+  if (req.session && req.session.admin) return next();
+  if (req.headers.accept && req.headers.accept.indexOf("application/json") !== -1) {
+    return res.status(401).json({ error: "No autorizado" });
+  }
+  return res.redirect("/login");
+}
+
+app.get("/admin", requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, "private/admin.html"));
 });
 
-app.get("/admin.html", (req, res) => {
-    // opcional por compatibilidad URL
-    return res.redirect("/admin");
+app.get("/admin.html", requireAdmin, (req, res) => {
+  res.redirect("/admin");
 });
 
 /* =====================================================
@@ -203,11 +209,7 @@ app.get("/logout", (req, res) => {
    RESERVAR
 ===================================================== */
 
-app.post("/reservar", async (req, res) => {
-
-    if (!req.session.admin) {
-        return res.status(403).send("Acceso no autorizado");
-    }
+app.post("/reservar", requireAdmin, async (req, res) => {
 
     let { nombre, telefono, dni, pack, clases } = req.body;
 
@@ -260,10 +262,10 @@ app.get("/reservas", requireAdmin, async (req, res) => {
     try {
         const result = await pool.query("SELECT * FROM reservas ORDER BY dia ASC");
         console.log("reservas count", result.rows.length);
-        res.json(result.rows);
+        return res.json(result.rows);
     } catch (err) {
-        console.error("/reservas error:", err.message);
-        res.status(500).send("Error interno");
+        console.error("/reservas error:", err);
+        return res.status(500).send("Error interno");
     }
 });
 
@@ -272,67 +274,31 @@ app.get("/reservas", requireAdmin, async (req, res) => {
 ===================================================== */
 
 app.get("/horarios-disponibles", requireAdmin, async (req, res) => {
-
     const fecha = req.query.fecha;
-
+    if (!fecha) return res.status(400).send("Fecha es obligatoria");
     const result = await pool.query(
         "SELECT hora, COUNT(*) as total FROM reservas WHERE dia = $1 GROUP BY hora",
         [fecha]
     );
-
-    res.json(result.rows);
+    return res.json(result.rows);
 });
 
 /* =====================================================
    ASISTENCIA
 ===================================================== */
 
-app.post("/asistencia", async (req, res) => {
-
-    if (!req.session.admin) {
-        return res.status(403).send("Acceso no autorizado");
-    }
-
-    const { dni } = req.body;
-
-    const hoy = new Date();
-    const fechaHoy = hoy.toISOString().split("T")[0];
-
-    const result = await pool.query(
-        "SELECT * FROM reservas WHERE dni = $1 AND dia = $2 AND asistida = 0",
-        [dni, fechaHoy]
-    );
-
-    if (result.rows.length === 0) {
-        return res.send("No tiene clase hoy");
-    }
-
-    await pool.query(
-        "UPDATE reservas SET asistida = 1 WHERE id = $1",
-        [result.rows[0].id]
-    );
-
-    res.send("Asistencia registrada");
+app.post("/asistencia", requireAdmin, async (req, res) => {
+  const { dni } = req.body;
+  if (!dni) return res.status(400).send("DNI requerido");
+  await pool.query("UPDATE reservas SET asistida=1 WHERE dni=$1 AND asistida=0", [dni]);
+  return res.send("Asistencia registrada");
 });
 
-/* =====================================================
-   REPROGRAMAR
-===================================================== */
-
-app.post("/reprogramar", async (req, res) => {
-
-    if (!req.session.admin) {
-        return res.status(403).send("Acceso no autorizado");
-    }
-
-    const { id, nuevoDia, nuevaHora } = req.body;
-
-    await pool.query(
-        "UPDATE reservas SET dia=$1, hora=$2 WHERE id=$3",
-        [nuevoDia, nuevaHora, id]
-    );
-
-    res.send("Clase reprogramada");
+app.post("/reprogramar", requireAdmin, async (req, res) => {
+  const { id, dia, hora } = req.body;
+  if (!id || !dia || !hora) return res.status(400).send("Datos incompletos");
+  await pool.query("UPDATE reservas SET dia=$1, hora=$2 WHERE id=$3", [dia, hora, id]);
+  return res.send("Reprogramado");
 });
 
 /* =====================================================
@@ -344,9 +310,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
     console.log("Servidor funcionando seguro 🚀");
 });
-
-// helper auth
-function requireAdmin(req, res, next) {
-    if (req.session && req.session.admin) return next();
-    return res.status(401).json({ error: "No autorizado" });
-}

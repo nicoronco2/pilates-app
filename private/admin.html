@@ -83,7 +83,6 @@
             <button id="btnSemanaAnt" type="button" class="btn btn-outline-secondary w-100 w-md-auto">Semana anterior</button>
             <button id="btnSemanaAct" type="button" class="btn btn-outline-dark w-100 w-md-auto">Semana actual</button>
             <button id="btnSemanaSig" type="button" class="btn btn-outline-secondary w-100 w-md-auto">Semana siguiente</button>
-            <button id="buscarClienteBtn" type="button" class="btn btn-primary w-100">Buscar cliente</button>
         </div>
 
         <h5 id="tituloSemana" class="mb-3 text-center text-md-start"></h5>
@@ -204,7 +203,7 @@ async function cargarCalendario() {
   }
 
   document.getElementById("tituloSemana").innerText =
-    `Semana del ${dias[0]} al ${dias[4]} (offset ${semanaOffset})`;
+    `Semana del ${dias[0]} al ${dias[4]}`;
 
   const tabla = document.getElementById("tablaCalendario");
   tabla.innerHTML = `

@@ -23,7 +23,19 @@ const intentosLogin = {};
 app.disable("x-powered-by");
 
 // Headers de seguridad
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "default-src": ["'self'"],
+      "script-src": ["'self'", "https://cdn.jsdelivr.net"],
+      "style-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],
+      "connect-src": ["'self'"],
+      "img-src": ["'self'", "data:"],
+      "font-src": ["'self'", "https://cdn.jsdelivr.net"],
+    }
+  }
+}));
 
 /* =====================================================
    CONFIGURACIÓN

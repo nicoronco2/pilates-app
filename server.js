@@ -38,7 +38,8 @@ app.use(helmet({
   }
 }));
 
-app.use(helmet({ contentSecurityPolicy: false }));
+// quitá o comenta esta línea para no reescribir CSP a “sin CSP”
+ // app.use(helmet({ contentSecurityPolicy: false }));
 
 /* =====================================================
    CONFIGURACIÓN

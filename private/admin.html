@@ -192,91 +192,84 @@ function pintarClientes() {
 /* ================= CALENDARIO ================= */
 
 function obtenerLunes() {
-    const hoy = new Date();
-    hoy.setDate(hoy.getDate() + (semanaOffset * 7));
-
-    const dia = hoy.getDay();
-    const lunes = new Date(hoy);
-    lunes.setDate(hoy.getDate() - (dia === 0 ? 6 : dia - 1));
-
-    return lunes;
+  const hoy = new Date();
+  hoy.setDate(hoy.getDate() + (semanaOffset * 7));
+  const diaSemana = (hoy.getDay() + 6) % 7; // 0=Lunes ... 6=Domingo
+  const lunes = new Date(hoy);
+  lunes.setDate(hoy.getDate() - diaSemana);
+  lunes.setHours(0,0,0,0);
+  return lunes;
 }
 
 async function cargarCalendario() {
+  console.log("cargarCalendario offset", semanaOffset);
+  const res = await fetch("/reservas", { ...opcionesFetch, cache: "no-store" });
+  if (res.status === 401 || res.status === 403) return window.location.href = "/login";
+  const datos = await res.json();
 
-    const res = await fetch("/reservas", { credentials: "include", cache: "no-store" });
+  const lunes = obtenerLunes();
 
-    if (res.status === 401 || res.status === 403) {
-        window.location.href = "/login";
-        return;
-    }
+  const dias = [];
 
-    const datos = await res.json();
+  for (let i = 0; i < 5; i++) {
+      const d = new Date(lunes);
+      d.setDate(lunes.getDate() + i);
 
-    const lunes = obtenerLunes();
+      const fecha =
+          d.getFullYear() + "-" +
+          String(d.getMonth()+1).padStart(2,"0") + "-" +
+          String(d.getDate()).padStart(2,"0");
 
-    const dias = [];
+      dias.push(fecha);
+  }
 
-    for (let i = 0; i < 5; i++) {
-        const d = new Date(lunes);
-        d.setDate(lunes.getDate() + i);
+  document.getElementById("tituloSemana").innerText = `Semana del ${dias[0]} al ${dias[4]}`;
 
-        const fecha =
-            d.getFullYear() + "-" +
-            String(d.getMonth()+1).padStart(2,"0") + "-" +
-            String(d.getDate()).padStart(2,"0");
+  const tabla = document.getElementById("tablaCalendario");
 
-        dias.push(fecha);
-    }
+  tabla.innerHTML = `
+      <tr>
+          <th>Hora</th>
+          <th>Lunes</th>
+          <th>Martes</th>
+          <th>Miércoles</th>
+          <th>Jueves</th>
+          <th>Viernes</th>
+      </tr>
+  `;
 
-    document.getElementById("tituloSemana").innerText =
-        "Semana del " + dias[0] + " al " + dias[4];
+  horarios.forEach(hora => {
 
-    const tabla = document.getElementById("tablaCalendario");
+      let fila = `<tr><td><b>${hora}</b></td>`;
 
-    tabla.innerHTML = `
-        <tr>
-            <th>Hora</th>
-            <th>Lunes</th>
-            <th>Martes</th>
-            <th>Miércoles</th>
-            <th>Jueves</th>
-            <th>Viernes</th>
-        </tr>
-    `;
+      dias.forEach(dia => {
 
-    horarios.forEach(hora => {
+          const personas = datos
+              .filter(r => r.dia === dia && r.hora === hora)
+              .slice(0, 4);
 
-        let fila = `<tr><td><b>${hora}</b></td>`;
+          let contenido = "";
 
-        dias.forEach(dia => {
+          personas.forEach(p => {
 
-            const personas = datos
-                .filter(r => r.dia === dia && r.hora === hora)
-                .slice(0, 4);
+              let color = "bg-secondary";
 
-            let contenido = "";
+              if (p.asistida == 1) color = "bg-success";
+              if (p.asistida == 0) color = "bg-warning";
 
-            personas.forEach(p => {
+              contenido += `
+              <div class="${color} text-white rounded p-1 mb-1 small">
+                  ${p.nombre}
+              </div>
+              `;
+          });
 
-                let color = "bg-secondary";
+          fila += `<td>${contenido}</td>`;
+      });
 
-                if (p.asistida == 1) color = "bg-success";
-                if (p.asistida == 0) color = "bg-warning";
-
-                contenido += `
-                <div class="${color} text-white rounded p-1 mb-1 small">
-                    ${p.nombre}
-                </div>
-                `;
-            });
-
-            fila += `<td>${contenido}</td>`;
-        });
-
-        fila += "</tr>";
-        tabla.innerHTML += fila;
-    });
+      fila += "</tr>";
+      tabla.innerHTML += fila;
+  });
 }
 
 /* ================= ASISTENCIA ================= */
@@ -303,11 +296,13 @@ async function confirmarAsistencia() {
 
 function cambiarSemana(valor) {
   semanaOffset += valor;
+  console.log("cambiarSemana", valor, "semanaOffset=", semanaOffset);
   cargarCalendario();
 }
 
 function irSemanaActual() {
   semanaOffset = 0;
+  console.log("irSemanaActual", "semanaOffset=", semanaOffset);
   cargarCalendario();
 }
 

@@ -50,7 +50,7 @@
             </div>
 
             <div class="col-12 col-md-3">
-                <button id="buscarClienteBtn" type="button" class="btn btn-primary w-100">
+                <button onclick="buscarCliente()" class="btn btn-primary w-100">
                     Buscar cliente
                 </button>
             </div>
@@ -312,23 +312,26 @@ function mostrarClases(dni) {
 
 async function buscarCliente() {
   const dni = document.getElementById("dniInput").value.trim();
-  if (!dni) return;
-
+  if (!dni) { return; }
   const lista = clientesGlobal[String(dni)] || [];
   if (!lista.length) {
     document.getElementById("infoCliente").innerText = "Cliente no encontrado";
     document.getElementById("btnAsistencia").style.display = "none";
     document.getElementById("clienteBuscadoTabla").innerHTML = "";
-    document.getElementById("panelClasesBuscado").innerHTML = "";
     return;
   }
-
   const cliente = lista[0];
   const restantes = lista.filter(x => x.asistida == 0).length;
   document.getElementById("infoCliente").innerHTML =
     `<strong>Nombre:</strong> ${cliente.nombre} | <strong>Restantes:</strong> ${restantes}`;
   document.getElementById("btnAsistencia").style.display = "block";
-  mostrarClases(cliente.dni);
+  document.getElementById("clienteBuscadoTabla").innerHTML =
+    `<div class="table-responsive mt-3">
+      <table class="table table-bordered">
+        <tr><th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th></tr>
+        <tr class="table-light"><td>${cliente.nombre}</td><td>${cliente.dni}</td><td>${cliente.telefono}</td><td>${cliente.pack}</td><td>${restantes}</td></tr>
+      </table>
+    </div>`;
 }
 
 async function reprogramarClase(id) {
@@ -353,12 +356,17 @@ async function reprogramarClase(id) {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  cargarReservas();
+document.addEventListener("DOMContentLoaded", cargarReservas);
 
-  document.getElementById("btnSemanaAnt").addEventListener("click", () => cambiarSemana(-1));
-  document.getElementById("btnSemanaAct").addEventListener("click", irSemanaActual);
-  document.getElementById("btnSemanaSig").addEventListener("click", () => cambiarSemana(1));
-  document.getElementById("buscarClienteBtn").addEventListener("click", buscarCliente);
-  document.getElementById("btnAsistencia").addEventListener("click", confirmarAsistencia);
-});
+document.getElementById("btnSemanaAnt").addEventListener("click", () => cambiarSemana(-1));
+document.getElementById("btnSemanaAct").addEventListener("click", irSemanaActual);
+document.getElementById("btnSemanaSig").addEventListener("click", () => cambiarSemana(1));
+document.getElementById("buscarClienteBtn").addEventListener("click", buscarCliente);
+document.getElementById("btnAsistencia").addEventListener("click", confirmarAsistencia);
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

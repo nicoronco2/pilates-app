@@ -28,14 +28,17 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       "default-src": ["'self'"],
-      "script-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],  // <<< esto
+      "script-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],
+      "script-src-attr": ["'unsafe-inline'"],
       "style-src": ["'self'", "https://cdn.jsdelivr.net", "'unsafe-inline'"],
       "connect-src": ["'self'"],
       "img-src": ["'self'", "data:"],
-      "font-src": ["'self'", "https://cdn.jsdelivr.net"],
+      "font-src": ["'self'", "https://cdn.jsdelivr.net"]
     }
   }
 }));
+
+app.use(helmet({ contentSecurityPolicy: false }));
 
 /* =====================================================
    CONFIGURACIÓN

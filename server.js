@@ -52,7 +52,7 @@ app.use(session({
     proxy: true,
     cookie: {
         httpOnly: true,
-        secure: isProduction,
+        secure: true,
         sameSite: isProduction ? "none" : "lax",
         maxAge: 1000 * 60 * 60
     }
@@ -69,6 +69,17 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL
 });
 
+// verificar y loguear
+pool.connect()
+    .then(client => {
+        client.release();
+        console.log("PostgreSQL conectado");
+    })
+    .catch(err => {
+        console.error("Error conectando PostgreSQL:", err.message);
+        process.exit(1); // mejor fallar rapido en deploy malo
+    });
+
 // Crear tabla si no existe
 pool.query(`
 CREATE TABLE IF NOT EXISTS reservas (
@@ -81,7 +92,9 @@ CREATE TABLE IF NOT EXISTS reservas (
     pack INTEGER,
     asistida INTEGER DEFAULT 0
 )
-`);
+`).catch(err => {
+    console.error("Error creando tabla reservas:", err.message);
+});
 
 /* =====================================================
    USUARIOS ADMIN (HASH)
@@ -230,14 +243,14 @@ app.post("/reservar", async (req, res) => {
    VER RESERVAS
 ===================================================== */
 
-app.get("/reservas", async (req, res) => {
-
-    if (!req.session.admin) {
-        return res.status(403).send("Acceso no autorizado");
+app.get("/reservas", requireAdmin, async (req, res) => {
+    try {
+        const result = await pool.query("SELECT * FROM reservas ORDER BY dia ASC");
+        res.json(result.rows);
+    } catch (err) {
+        console.error("/reservas error:", err.message);
+        res.status(500).send("Error interno");
     }
-
-    const result = await pool.query("SELECT * FROM reservas ORDER BY dia ASC");
-    res.json(result.rows);
 });
 
 /* =====================================================
@@ -315,4 +328,11 @@ app.post("/reprogramar", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-    console.log("Servidor funcionando seguro 🚀");})
+    console.log("Servidor funcionando seguro 🚀");
+});
+
+// helper auth
+function requireAdmin(req, res, next) {
+    if (req.session && req.session.admin) return next();
+    return res.status(401).json({ error: "No autorizado" });
+}

@@ -379,6 +379,25 @@ async function reprogramarClase(id) {
   }
 }
 
+async function eliminarCliente(dni, nombre) {
+  if (!confirm(`¿Seguro que querés eliminar a ${nombre} y todos sus registros?`)) {
+    return;
+  }
+
+  const res = await fetch("/eliminar-cliente", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify({ dni })
+  });
+
+  if (res.ok) {
+    alert("Cliente eliminado correctamente");
+    await cargarReservas();
+  } else {
+    alert("Error al eliminar cliente");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", cargarReservas);
 
 document.getElementById("btnSemanaAnt").addEventListener("click", () => cambiarSemana(-1));

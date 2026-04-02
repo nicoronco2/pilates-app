@@ -327,6 +327,22 @@ app.post("/reprogramar", requireAdmin, async (req, res) => {
   return res.send("Reprogramado");
 });
 
+app.post("/eliminar-cliente", requireAdmin, async (req, res) => {
+  const { dni } = req.body;
+  if (!dni) return res.status(400).send("DNI requerido");
+  
+  const result = await pool.query(
+    "DELETE FROM reservas WHERE dni = $1",
+    [dni]
+  );
+  
+  if (result.rowCount === 0) {
+    return res.status(404).send("Cliente no encontrado");
+  }
+  
+  return res.send("OK");
+});
+
 /* =====================================================
    SERVER
 ===================================================== */

@@ -134,6 +134,9 @@ async function cambiarHorarios(inputFecha) {
     try {
 
         const res = await fetch("/horarios-disponibles?fecha=" + inputFecha.value);
+        if (!res.ok) {
+            throw new Error(`Error ${res.status}`);
+        }
         const ocupados = await res.json();
 
         selectHora.innerHTML = "<option value=''>Elegir horario</option>";
@@ -151,6 +154,7 @@ async function cambiarHorarios(inputFecha) {
         });
 
     } catch (error) {
+        console.error("horarios-disponibles:", error);
         selectHora.innerHTML = "<option>Error cargando horarios</option>";
     }
 }

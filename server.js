@@ -276,7 +276,7 @@ app.get("/reservas", requireAdmin, async (req, res) => {
    HORARIOS
 ===================================================== */
 
-app.get("/horarios-disponibles", requireAdmin, async (req, res) => {
+app.get("/horarios-disponibles", async (req, res) => {
     const fecha = req.query.fecha;
     if (!fecha) return res.status(400).send("Fecha es obligatoria");
     const result = await pool.query(

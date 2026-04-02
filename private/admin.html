@@ -312,26 +312,51 @@ function mostrarClases(dni) {
 
 async function buscarCliente() {
   const dni = document.getElementById("dniInput").value.trim();
-  if (!dni) { return; }
-  const lista = clientesGlobal[String(dni)] || [];
+  if (!dni) return;
+
+  const lista = clientesGlobal[dni] || [];
   if (!lista.length) {
     document.getElementById("infoCliente").innerText = "Cliente no encontrado";
     document.getElementById("btnAsistencia").style.display = "none";
     document.getElementById("clienteBuscadoTabla").innerHTML = "";
+    document.getElementById("panelClasesBuscado").innerHTML = "";
     return;
   }
+
   const cliente = lista[0];
   const restantes = lista.filter(x => x.asistida == 0).length;
   document.getElementById("infoCliente").innerHTML =
     `<strong>Nombre:</strong> ${cliente.nombre} | <strong>Restantes:</strong> ${restantes}`;
+
   document.getElementById("btnAsistencia").style.display = "block";
-  document.getElementById("clienteBuscadoTabla").innerHTML =
-    `<div class="table-responsive mt-3">
+
+  document.getElementById("clienteBuscadoTabla").innerHTML = `
+    <div class="table-responsive mt-3">
       <table class="table table-bordered">
-        <tr><th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th></tr>
-        <tr class="table-light"><td>${cliente.nombre}</td><td>${cliente.dni}</td><td>${cliente.telefono}</td><td>${cliente.pack}</td><td>${restantes}</td></tr>
+        <thead class="table-dark">
+          <tr>
+            <th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th><th>Ver clases</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${cliente.nombre}</td>
+            <td>${cliente.dni}</td>
+            <td>${cliente.telefono}</td>
+            <td>${cliente.pack}</td>
+            <td>${restantes}</td>
+            <td>
+              <button type="button" class="btn btn-sm btn-primary"
+                      onclick="mostrarClases('${cliente.dni}')">
+                Ver clases
+              </button>
+            </td>
+          </tr>
+        </tbody>
       </table>
     </div>`;
+
+  mostrarClases(cliente.dni);
 }
 
 async function reprogramarClase(id) {

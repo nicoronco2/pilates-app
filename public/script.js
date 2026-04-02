@@ -231,3 +231,11 @@ document.getElementById("formReserva").addEventListener("submit", async function
         document.getElementById("clasesContainer").innerHTML = "";
     }
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+    const selectPack = document.getElementById("pack");
+
+    if (selectPack) {
+        selectPack.addEventListener("change", generarClases);
+    }
+});

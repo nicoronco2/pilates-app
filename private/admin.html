@@ -147,7 +147,7 @@ const horarios = [
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
 
 async function cargarReservas() {
-  const r = await fetch("/reservas", { ...opcionesFetch });
+  const r = await fetch("/reservas", { ...opcionesFetch, cache: "no-store" });
   if (r.status === 401 || r.status === 403) return window.location = "/login";
   const datos = await r.json();
 
@@ -162,7 +162,7 @@ async function cargarReservas() {
 }
 
 function pintarClientes() {
-  const tabla = document.getElementById("clientesTablaBody");
+  const tabla = document.getElementById("tabla"); // <-- coincide con HTML
   if (!tabla) return;
   tabla.innerHTML = "";
 
@@ -175,7 +175,7 @@ function pintarClientes() {
   keys.forEach(dni => {
     const lista = clientesGlobal[dni];
     const cli = lista[0];
-    const restantes = lista.filter(r => r.asistida === 0).length;
+    const restantes = lista.filter(r => String(r.asistida) === "0").length;
     tabla.innerHTML += `
       <tr>
         <td>${cli.nombre}</td>
@@ -204,9 +204,7 @@ function obtenerLunes() {
 
 async function cargarCalendario() {
 
-    const res = await fetch("/reservas", {
-    credentials: "include"
-    });
+    const res = await fetch("/reservas", { credentials: "include", cache: "no-store" });
 
     if (res.status === 401 || res.status === 403) {
         window.location.href = "/login";
@@ -304,20 +302,20 @@ async function confirmarAsistencia() {
 
 
 function cambiarSemana(valor) {
-    semanaOffset += valor;
-    cargarCalendario();
+  semanaOffset += valor;
+  cargarCalendario();
 }
 
 function irSemanaActual() {
-    semanaOffset = 0;
-    cargarCalendario();
+  semanaOffset = 0;
+  cargarCalendario();
 }
 
 async function buscarCliente() {
     const dni = document.getElementById("dniInput").value.trim();
     if (!dni) return;
 
-    const lista = clientesGlobal[dni] || [];
+    const lista = clientesGlobal[String(dni)] || [];
 
     if (lista.length === 0) {
         document.getElementById("infoCliente").innerHTML = "Cliente no encontrado";

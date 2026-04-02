@@ -272,7 +272,7 @@ function mostrarClases(dni) {
       <table class="table table-sm table-bordered">
         <thead class="table-dark">
           <tr>
-            <th>#</th><th>Día</th><th>Hora</th><th>Estado</th><th>Color</th><th>Acción</th>
+            <th>#</th><th>Día</th><th>Hora</th><th>Estado</th><th>Acción</th>
           </tr>
         </thead>
         <tbody>
@@ -280,16 +280,14 @@ function mostrarClases(dni) {
 
   lista.forEach((r, idx) => {
     const asistencia = r.asistida == 1 ? "Asistió" : "Pendiente";
-    const badge = r.asistida == 1
-      ? '<span class="badge bg-success">Asistido</span>'
-      : '<span class="badge bg-warning text-dark">Pendiente</span>';
+    const rowClass = r.asistida == 1 ? "table-success" : "table-warning text-dark";
+
     html += `
-      <tr>
+      <tr class="${rowClass}">
         <td>${idx + 1}</td>
         <td>${r.dia}</td>
         <td>${r.hora}</td>
         <td>${asistencia}</td>
-        <td>${badge}</td>
         <td>
           <button type="button"
                   class="btn btn-sm btn-outline-secondary"

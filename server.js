@@ -19,10 +19,7 @@ const intentosLogin = {};
    SEGURIDAD BASE
 ===================================================== */
 
-// Oculta que usás Express
 app.disable("x-powered-by");
-
-// Headers de seguridad
 app.use(helmet());
 
 /* =====================================================
@@ -34,7 +31,9 @@ app.use(express.urlencoded({ extended: true }));
 
 const isProduction = process.env.NODE_ENV === "production";
 
-// HTTPS obligatorio en producción
+/* HTTPS obligatorio (Render usa proxy) */
+app.set("trust proxy", 1);
+
 app.use((req, res, next) => {
     if (isProduction && req.headers["x-forwarded-proto"] !== "https") {
         return res.redirect("https://" + req.headers.host + req.url);
@@ -42,8 +41,7 @@ app.use((req, res, next) => {
     next();
 });
 
-app.set("trust proxy", 1);
-
+/* SESIONES (FIX CLAVE) */
 app.use(session({
     name: "pilates-session",
     secret: process.env.SESSION_SECRET,
@@ -52,13 +50,13 @@ app.use(session({
     proxy: true,
     cookie: {
         httpOnly: true,
-        secure: true,
-        sameSite: "none",
+        secure: isProduction, // 🔥 SOLO en producción
+        sameSite: isProduction ? "none" : "lax",
         maxAge: 1000 * 60 * 60
     }
 }));
 
-/* SOLO lo público */
+/* ARCHIVOS PÚBLICOS */
 app.use(express.static("public"));
 
 /* =====================================================
@@ -66,10 +64,10 @@ app.use(express.static("public"));
 ===================================================== */
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
+    connectionString: process.env.DATABASE_URL,
+    ssl: isProduction ? { rejectUnauthorized: false } : false
 });
 
-// Crear tabla si no existe
 pool.query(`
 CREATE TABLE IF NOT EXISTS reservas (
     id SERIAL PRIMARY KEY,
@@ -84,7 +82,7 @@ CREATE TABLE IF NOT EXISTS reservas (
 `);
 
 /* =====================================================
-   USUARIOS ADMIN (HASH)
+   USUARIOS ADMIN
 ===================================================== */
 
 const usuarios = [
@@ -126,11 +124,15 @@ app.post("/login", async (req, res) => {
     const usuarioEncontrado = usuarios.find(u => u.user === usuario);
 
     if (usuarioEncontrado) {
+
         const coincide = await bcrypt.compare(password, usuarioEncontrado.pass);
 
         if (coincide) {
+
             delete intentosLogin[ip];
+
             req.session.admin = true;
+
             return res.redirect("/admin");
         }
     }
@@ -202,7 +204,7 @@ app.post("/reservar", async (req, res) => {
         [dni]
     );
 
-    if (pendientes.rows[0].count > 0) {
+    if (parseInt(pendientes.rows[0].count) > 0) {
         return res.send("El cliente tiene un pack en curso");
     }
 
@@ -213,7 +215,7 @@ app.post("/reservar", async (req, res) => {
             [c.dia, c.hora]
         );
 
-        if (total.rows[0].count >= 4) {
+        if (parseInt(total.rows[0].count) >= 4) {
             return res.send("Horario lleno");
         }
 
@@ -268,8 +270,7 @@ app.post("/asistencia", async (req, res) => {
 
     const { dni } = req.body;
 
-    const hoy = new Date();
-    const fechaHoy = hoy.toISOString().split("T")[0];
+    const fechaHoy = new Date().toISOString().split("T")[0];
 
     const result = await pool.query(
         "SELECT * FROM reservas WHERE dni = $1 AND dia = $2 AND asistida = 0",
@@ -315,5 +316,5 @@ app.post("/reprogramar", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-    console.log("Servidor funcionando seguro 🚀");
+    console.log("Servidor funcionando perfecto 🚀");
 });

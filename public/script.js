@@ -4,7 +4,12 @@
 
 function generarClases() {
 
-    const pack = parseInt(document.getElementById("pack").value);
+    const packValue = document.getElementById("pack").value;
+
+    // 🔥 FIX: si no hay pack seleccionado, no hace nada
+    if (!packValue) return;
+
+    const pack = parseInt(packValue);
     const container = document.getElementById("clasesContainer");
 
     container.innerHTML = "";
@@ -12,15 +17,15 @@ function generarClases() {
     for (let i = 1; i <= pack; i++) {
 
         container.innerHTML += `
-        <div class="clase mb-4 p-3 border rounded">
+        <div class="clase mb-4 p-3 border rounded bg-white shadow-sm">
 
             <h5 class="mb-3">Clase ${i}</h5>
 
             <label class="form-label">Fecha</label>
-            <input type="date" class="fecha form-control mb-2">
+            <input type="date" class="fecha form-control mb-2" required>
 
             <label class="form-label">Horario</label>
-            <select class="hora form-select">
+            <select class="hora form-select" required>
                 <option value="">Elegir horario</option>
             </select>
 
@@ -30,7 +35,7 @@ function generarClases() {
 
     bloquearFechas();
 
-    /* VALIDAR SOLO CUANDO EL USUARIO CONFIRMA LA FECHA */
+    /* VALIDAR FECHAS */
     document.querySelectorAll(".fecha").forEach(input => {
 
         input.addEventListener("change", function () {
@@ -44,7 +49,7 @@ function generarClases() {
                 return;
             }
 
-            /* Validar sábado/domingo */
+            /* VALIDAR FIN DE SEMANA */
             const fecha = new Date(this.value + "T00:00:00");
             const dia = fecha.getDay();
 
@@ -54,7 +59,7 @@ function generarClases() {
                 return;
             }
 
-            /* Cargar horarios */
+            /* CARGAR HORARIOS */
             cambiarHorarios(this);
         });
     });
@@ -119,7 +124,7 @@ async function cambiarHorarios(inputFecha) {
     const clase = inputFecha.closest(".clase");
     const selectHora = clase.querySelector(".hora");
 
-    selectHora.innerHTML = "<option value=''>Cargando horarios...</option>";
+    selectHora.innerHTML = "<option value=''>Cargando...</option>";
 
     const horarios = [
         "08:00","09:00","10:00","11:00",
@@ -139,6 +144,9 @@ async function cambiarHorarios(inputFecha) {
 
             if (!ocupado) {
                 selectHora.innerHTML += `<option value="${h}">${h}</option>`;
+            } else {
+                // 🔥 OPCIONAL: mostrar ocupado deshabilitado
+                selectHora.innerHTML += `<option disabled>${h} (completo)</option>`;
             }
         });
 
@@ -148,7 +156,7 @@ async function cambiarHorarios(inputFecha) {
 }
 
 /* =========================================================
-   CLASES POR SEMANA SEGÚN PACK
+   CLASES POR SEMANA
 ========================================================= */
 
 function clasesPorSemana(pack) {
@@ -184,7 +192,7 @@ document.getElementById("formReserva").addEventListener("submit", async function
     for (let i = 0; i < fechas.length; i++) {
 
         if (!fechas[i].value || !horas[i].value) {
-            alert("Tenés que elegir fecha y horario en todas las clases");
+            alert("Tenés que completar todas las clases");
             return;
         }
 
@@ -200,9 +208,10 @@ document.getElementById("formReserva").addEventListener("submit", async function
         semanas[semana]++;
     }
 
+    /* VALIDAR CLASES POR SEMANA */
     for (let s in semanas) {
         if (semanas[s] > porSemana) {
-            alert("Superaste la cantidad de clases permitidas por semana según el pack");
+            alert("Superaste la cantidad de clases permitidas por semana");
             return;
         }
     }

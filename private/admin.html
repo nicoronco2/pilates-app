@@ -113,6 +113,7 @@
                         <th>Clases</th>
                         <th>Restantes</th>
                         <th>Recordatorio</th>
+                        <th>Acción</th>
                     </tr>
                 </thead>
 
@@ -156,7 +157,7 @@ function pintarClientes() {
 
   const keys = Object.keys(clientesGlobal).sort();
   if (keys.length === 0) {
-    tabla.innerHTML = "<tr><td colspan='7'>No hay clientes</td></tr>";
+    tabla.innerHTML = "<tr><td colspan='8'>No hay clientes</td></tr>";
     return;
   }
 
@@ -177,6 +178,13 @@ function pintarClientes() {
                   class="btn btn-sm btn-primary"
                   onclick="mostrarClases('${dni}')">
             Ver clases
+          </button>
+        </td>
+        <td>
+          <button type="button"
+                  class="btn btn-sm btn-danger"
+                  onclick="eliminarCliente('${dni}', '${cli.nombre.replace(/'/g, "\\'")}')">
+            Eliminar
           </button>
         </td>
       </tr>`;

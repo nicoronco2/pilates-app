@@ -239,3 +239,35 @@ document.addEventListener("DOMContentLoaded", () => {
         selectPack.addEventListener("change", generarClases);
     }
 });
+
+let horaAsistenciaHoy = "";
+
+function buscarCliente() {
+  const hoy = new Date();
+  const fHoy = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,"0")}-${String(hoy.getDate()).padStart(2,"0")}`;
+  const hoyPendiente = lista.find(c => c.dia === fHoy && c.asistida == 0);
+
+  if (hoyPendiente) {
+    horaAsistenciaHoy = hoyPendiente.hora;
+    document.getElementById("infoCliente").innerHTML = `Nombre: ${cliente.nombre} | Restantes: ${restantes} | Clase hoy ${hoyPendiente.hora}`;
+    document.getElementById("btnAsistencia").style.display = "block";
+  } else {
+    horaAsistenciaHoy = "";
+    document.getElementById("infoCliente").innerHTML = "No hay clase pendiente para hoy";
+    document.getElementById("btnAsistencia").style.display = "none";
+  }
+}
+
+async function confirmarAsistencia() {
+  const dni = document.getElementById("dniInput").value.trim();
+  if (!dni) return alert("Ingresá DNI");
+  if (!horaAsistenciaHoy) return alert("No hay clase pendiente para hoy");
+  const res = await fetch("/asistencia", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify({ dni, hora: horaAsistenciaHoy })
+  });
+  const text = await res.text();
+  alert(text);
+  if (res.ok) await cargarReservas();
+}

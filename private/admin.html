@@ -223,7 +223,8 @@ async function cargarCalendario() {
       dias.push(fecha);
   }
 
-  document.getElementById("tituloSemana").innerText = `Semana del ${dias[0]} al ${dias[4]}`;
+  document.getElementById("tituloSemana").innerText =
+    `Semana del ${dias[0]} al ${dias[4]} (offset ${semanaOffset})`;
 
   const tabla = document.getElementById("tablaCalendario");
 
@@ -309,8 +310,7 @@ function irSemanaActual() {
 async function buscarCliente() {
     const dni = document.getElementById("dniInput").value.trim();
     if (!dni) return;
-
-    const lista = clientesGlobal[String(dni)] || [];
+    const lista = clientesGlobal[dni] || clientesGlobal[Number(dni)] || [];
 
     if (lista.length === 0) {
         document.getElementById("infoCliente").innerHTML = "Cliente no encontrado";
@@ -347,12 +347,7 @@ async function buscarCliente() {
 
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
-  try {
-    await cargarReservas();
-    // si cargarReservas llama a cargarCalendario, no hace falta otra vez
-  } catch (err) {
-    console.error("Error iniciar admin", err);
-  }
+  await cargarReservas(); // carga clientes + semana actual
 });
 </script>
 

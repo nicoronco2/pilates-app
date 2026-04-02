@@ -80,15 +80,15 @@
         <h4 class="mb-3">Calendario semanal</h4>
 
         <div class="d-flex flex-column flex-md-row gap-2 mb-3">
-            <button onclick="cambiarSemana(-1)" class="btn btn-outline-secondary w-100 w-md-auto">
+            <button type="button" onclick="cambiarSemana(-1)" class="btn btn-outline-secondary w-100 w-md-auto">
                 Semana anterior
             </button>
 
-            <button onclick="irSemanaActual()" class="btn btn-outline-dark w-100 w-md-auto">
+            <button type="button" onclick="irSemanaActual()" class="btn btn-outline-dark w-100 w-md-auto">
                 Semana actual
             </button>
 
-            <button onclick="cambiarSemana(1)" class="btn btn-outline-secondary w-100 w-md-auto">
+            <button type="button" onclick="cambiarSemana(1)" class="btn btn-outline-secondary w-100 w-md-auto">
                 Semana siguiente
             </button>
         </div>
@@ -300,7 +300,6 @@ function cambiarSemana(valor) {
   console.log("cambiarSemana", valor, "semanaOffset=", semanaOffset);
   cargarCalendario();
 }
-
 function irSemanaActual() {
   semanaOffset = 0;
   console.log("irSemanaActual", "semanaOffset=", semanaOffset);
@@ -309,8 +308,8 @@ function irSemanaActual() {
 
 async function buscarCliente() {
     const dni = document.getElementById("dniInput").value.trim();
-    if (!dni) return;
-    const lista = clientesGlobal[dni] || clientesGlobal[Number(dni)] || [];
+    const key = String(dni).trim();
+    const lista = clientesGlobal[key] || [];
 
     if (lista.length === 0) {
         document.getElementById("infoCliente").innerHTML = "Cliente no encontrado";

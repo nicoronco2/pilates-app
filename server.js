@@ -8,6 +8,7 @@ const helmet = require("helmet");
 const { Pool } = require("pg");
 
 const app = express();
+const HORARIOS_VALIDOS = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 
 /* =====================================================
    VARIABLES
@@ -76,9 +77,6 @@ app.use(session({
     }
 }));
 
-/* SOLO lo público */
-app.use(express.static("public"));
-
 /* =====================================================
    BASE DE DATOS (POSTGRESQL)
 ===================================================== */
@@ -128,6 +126,72 @@ const usuarios = [
         pass: "$2b$10$rRAR0nWhPTe8zI0HKE.IQecu0WCyZDoBnCDJ5KvBzqPjcVELVSTbm"
     }
 ];
+
+function esTextoNumerico(valor) {
+    return validator.isNumeric(String(valor || "").trim(), { no_symbols: true });
+}
+
+function esHoraValida(hora) {
+    return HORARIOS_VALIDOS.includes(hora);
+}
+
+function obtenerPartesFecha(fecha) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(fecha || "").trim());
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+        date.getUTCFullYear() !== year ||
+        date.getUTCMonth() + 1 !== month ||
+        date.getUTCDate() !== day
+    ) {
+        return null;
+    }
+
+    return { date };
+}
+
+function esFechaValida(fecha) {
+    return Boolean(obtenerPartesFecha(fecha));
+}
+
+function esFinDeSemana(fecha) {
+    const partes = obtenerPartesFecha(fecha);
+    if (!partes) return false;
+    const diaSemana = partes.date.getUTCDay();
+    return diaSemana === 0 || diaSemana === 6;
+}
+
+async function bloquearHorario(client, dia, hora) {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${dia}|${hora}`]);
+}
+
+async function contarReservasPorHorario(client, dia, hora, excludeId = null) {
+    if (excludeId) {
+        const result = await client.query(
+            "SELECT COUNT(*) FROM reservas WHERE dia = $1 AND hora = $2 AND id <> $3",
+            [dia, hora, excludeId]
+        );
+        return Number(result.rows[0].count);
+    }
+
+    const result = await client.query(
+        "SELECT COUNT(*) FROM reservas WHERE dia = $1 AND hora = $2",
+        [dia, hora]
+    );
+    return Number(result.rows[0].count);
+}
+
+function validarClase({ dia, hora }) {
+    if (!esFechaValida(dia)) return "Fecha inválida";
+    if (esFinDeSemana(dia)) return "Los sábados y domingos no hay clases";
+    if (!esHoraValida(hora)) return "Horario inválido";
+    return null;
+}
 
 /* =====================================================
    LOGIN
@@ -226,38 +290,72 @@ app.post("/reservar", requireAdmin, async (req, res) => {
     nombre = validator.escape(nombre || "").trim();
     telefono = validator.escape(telefono || "").trim();
     dni = validator.escape(dni || "").trim();
+    pack = Number(pack);
 
     if (validator.isEmpty(nombre)) return res.send("Nombre obligatorio");
-    if (!validator.isNumeric(dni)) return res.send("DNI inválido");
-    if (!validator.isNumeric(telefono)) return res.send("Teléfono inválido");
+    if (!esTextoNumerico(dni)) return res.send("DNI inválido");
+    if (!esTextoNumerico(telefono)) return res.send("Teléfono inválido");
+    if (![4, 8, 12, 16].includes(pack)) return res.send("Pack inválido");
+    if (clases.length !== pack) return res.send("Cantidad de clases inválida para el pack seleccionado");
 
-    const pendientes = await pool.query(
-        "SELECT COUNT(*) FROM reservas WHERE dni = $1 AND asistida = 0",
-        [dni]
-    );
+    const fechas = new Set();
+    for (const c of clases) {
+        const clase = {
+            dia: String(c?.dia || "").trim(),
+            hora: String(c?.hora || "").trim()
+        };
 
-    if (pendientes.rows[0].count > 0) {
-        return res.send("El cliente tiene un pack en curso");
+        const error = validarClase(clase);
+        if (error) return res.send(error);
+
+        if (fechas.has(clase.dia)) {
+            return res.send("No podés reservar dos clases el mismo día");
+        }
+        fechas.add(clase.dia);
     }
 
-    for (const c of clases) {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
 
-        const total = await pool.query(
-            "SELECT COUNT(*) FROM reservas WHERE dia = $1 AND hora = $2",
-            [c.dia, c.hora]
+        const pendientes = await client.query(
+            "SELECT COUNT(*) FROM reservas WHERE dni = $1 AND asistida = 0",
+            [dni]
         );
 
-        if (total.rows[0].count >= 4) {
-            return res.send("Horario lleno");
+        if (Number(pendientes.rows[0].count) > 0) {
+            await client.query("ROLLBACK");
+            return res.send("El cliente tiene un pack en curso");
         }
 
-        await pool.query(
-            "INSERT INTO reservas (nombre, telefono, dni, dia, hora, pack) VALUES ($1,$2,$3,$4,$5,$6)",
-            [nombre, telefono, dni, c.dia, c.hora, pack]
-        );
-    }
+        const clasesOrdenadas = [...clases]
+            .map(c => ({ dia: String(c.dia).trim(), hora: String(c.hora).trim() }))
+            .sort((a, b) => `${a.dia}|${a.hora}`.localeCompare(`${b.dia}|${b.hora}`));
 
-    res.send("Reserva guardada correctamente");
+        for (const c of clasesOrdenadas) {
+            await bloquearHorario(client, c.dia, c.hora);
+
+            const total = await contarReservasPorHorario(client, c.dia, c.hora);
+            if (total >= 4) {
+                await client.query("ROLLBACK");
+                return res.send("Horario lleno");
+            }
+
+            await client.query(
+                "INSERT INTO reservas (nombre, telefono, dni, dia, hora, pack) VALUES ($1,$2,$3,$4,$5,$6)",
+                [nombre, telefono, dni, c.dia, c.hora, pack]
+            );
+        }
+
+        await client.query("COMMIT");
+        return res.send("Reserva guardada correctamente");
+    } catch (err) {
+        await client.query("ROLLBACK");
+        console.error("/reservar error:", err);
+        return res.status(500).send("Error interno");
+    } finally {
+        client.release();
+    }
 });
 
 /* =====================================================
@@ -305,14 +403,26 @@ app.post("/asistencia", requireAdmin, async (req, res) => {
 
   let result;
   if (hora) {
+    if (!esHoraValida(String(hora).trim())) {
+      return res.status(400).send("Horario inválido");
+    }
     result = await pool.query(
       "UPDATE reservas SET asistida = 1 WHERE dni = $1 AND hora = $2 AND asistida = 0 AND dia = $3",
       [dni, hora, fechaHoy]
     );
   } else {
-    result = await pool.query(
-      "UPDATE reservas SET asistida = 1 WHERE dni = $1 AND asistida = 0 AND dia = $2",
+    const pendientes = await pool.query(
+      "SELECT id FROM reservas WHERE dni = $1 AND asistida = 0 AND dia = $2 ORDER BY hora ASC",
       [dni, fechaHoy]
+    );
+
+    if (pendientes.rowCount > 1) {
+      return res.status(400).send("Hay más de una clase pendiente hoy para este DNI");
+    }
+
+    result = await pool.query(
+      "UPDATE reservas SET asistida = 1 WHERE id = $1",
+      [pendientes.rows[0]?.id]
     );
   }
 
@@ -326,8 +436,45 @@ app.post("/asistencia", requireAdmin, async (req, res) => {
 app.post("/reprogramar", requireAdmin, async (req, res) => {
   const { id, dia, hora } = req.body;
   if (!id || !dia || !hora) return res.status(400).send("Datos incompletos");
-  await pool.query("UPDATE reservas SET dia=$1, hora=$2 WHERE id=$3", [dia, hora, id]);
-  return res.send("Reprogramado");
+
+  const nuevaClase = {
+    dia: String(dia || "").trim(),
+    hora: String(hora || "").trim()
+  };
+  const error = validarClase(nuevaClase);
+  if (error) return res.status(400).send(error);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await bloquearHorario(client, nuevaClase.dia, nuevaClase.hora);
+
+    const reservaActual = await client.query(
+      "SELECT id FROM reservas WHERE id = $1",
+      [id]
+    );
+
+    if (reservaActual.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).send("Reserva no encontrada");
+    }
+
+    const total = await contarReservasPorHorario(client, nuevaClase.dia, nuevaClase.hora, id);
+    if (total >= 4) {
+      await client.query("ROLLBACK");
+      return res.status(400).send("Horario lleno");
+    }
+
+    await client.query("UPDATE reservas SET dia=$1, hora=$2 WHERE id=$3", [nuevaClase.dia, nuevaClase.hora, id]);
+    await client.query("COMMIT");
+    return res.send("Reprogramado");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/reprogramar error:", err);
+    return res.status(500).send("Error interno");
+  } finally {
+    client.release();
+  }
 });
 
 app.post("/eliminar-cliente", requireAdmin, async (req, res) => {

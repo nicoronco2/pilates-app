@@ -173,6 +173,19 @@ function clasesPorSemana(pack) {
     return 1;
 }
 
+function obtenerClaveSemana(fechaTexto) {
+    const [year, month, day] = fechaTexto.split("-").map(Number);
+    const fecha = new Date(year, month - 1, day);
+    const diaSemana = (fecha.getDay() + 6) % 7;
+    fecha.setDate(fecha.getDate() - diaSemana);
+
+    const yyyy = fecha.getFullYear();
+    const mm = String(fecha.getMonth() + 1).padStart(2, "0");
+    const dd = String(fecha.getDate()).padStart(2, "0");
+
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 /* =========================================================
    ENVIAR RESERVA
 ========================================================= */
@@ -205,8 +218,7 @@ document.getElementById("formReserva").addEventListener("submit", async function
             hora: horas[i].value
         });
 
-        const fecha = new Date(fechas[i].value);
-        const semana = Math.floor(fecha.getTime() / (1000 * 60 * 60 * 24 * 7));
+        const semana = obtenerClaveSemana(fechas[i].value);
 
         if (!semanas[semana]) semanas[semana] = 0;
         semanas[semana]++;

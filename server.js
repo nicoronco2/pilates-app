@@ -70,7 +70,7 @@ app.use(session({
     proxy: true,
     cookie: {
         httpOnly: true,
-        secure: true,
+        secure: isProduction,
         sameSite: isProduction ? "none" : "lax",
         maxAge: 1000 * 60 * 60
     }

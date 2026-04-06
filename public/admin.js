@@ -19,6 +19,12 @@ function obtenerFechaHoy() {
   return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
 }
 
+function formatearFecha(fechaTexto) {
+  const [year, month, day] = String(fechaTexto).split("-");
+  if (!year || !month || !day) return fechaTexto;
+  return `${day}/${month}/${year}`;
+}
+
 async function cargarReservas() {
   const r = await fetch("/reservas", { ...opcionesFetch, cache: "no-store" });
   if (r.status === 401 || r.status === 403) return window.location = "/login";
@@ -102,7 +108,8 @@ async function cargarCalendario() {
     dias.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
   }
 
-  document.getElementById("tituloSemana").innerText = `Semana del ${dias[0]} al ${dias[4]}`;
+  document.getElementById("tituloSemana").innerText =
+    `Semana del ${formatearFecha(dias[0])} al ${formatearFecha(dias[4])}`;
 
   const tabla = document.getElementById("tablaCalendario");
   tabla.innerHTML = `

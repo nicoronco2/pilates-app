@@ -50,7 +50,7 @@
             </div>
 
             <div class="col-12 col-md-3">
-                <button id="buscarClienteBtn" onclick="buscarCliente()" class="btn btn-primary w-100">
+                <button id="buscarClienteBtn" type="button" class="btn btn-primary w-100">
                     Buscar cliente
                 </button>
             </div>
@@ -59,9 +59,9 @@
         <div id="infoCliente" class="mt-3"></div>
 
         <button id="btnAsistencia"
+                type="button"
                 class="btn btn-success mt-3 w-100 w-md-auto"
-                style="display:none;"
-                onclick="confirmarAsistencia()">
+                style="display:none;">
             Confirmar asistencia de hoy
         </button>
 
@@ -176,14 +176,17 @@ function pintarClientes() {
         <td>
           <button type="button"
                   class="btn btn-sm btn-primary"
-                  onclick="mostrarClases('${dni}')">
+                  data-action="mostrar-clases"
+                  data-dni="${dni}">
             Ver clases
           </button>
         </td>
         <td>
           <button type="button"
                   class="btn btn-sm btn-danger"
-                  onclick="eliminarCliente('${dni}', '${cli.nombre.replace(/'/g, "\\'")}')">
+                  data-action="eliminar-cliente"
+                  data-dni="${dni}"
+                  data-nombre="${cli.nombre.replace(/"/g, "&quot;")}">
             Eliminar
           </button>
         </td>
@@ -299,7 +302,8 @@ function mostrarClases(dni) {
         <td>
           <button type="button"
                   class="btn btn-sm btn-outline-secondary"
-                  onclick="reprogramarClase(${r.id})">
+                  data-action="reprogramar-clase"
+                  data-id="${r.id}">
             Reprogramar
           </button>
         </td>
@@ -353,7 +357,8 @@ async function buscarCliente() {
             <td>${restantes}</td>
             <td>
               <button type="button" class="btn btn-sm btn-primary"
-                      onclick="mostrarClases('${cliente.dni}')">
+                      data-action="mostrar-clases"
+                      data-dni="${cliente.dni}">
                 Ver clases
               </button>
             </td>
@@ -413,6 +418,26 @@ document.getElementById("btnSemanaAct").addEventListener("click", irSemanaActual
 document.getElementById("btnSemanaSig").addEventListener("click", () => cambiarSemana(1));
 document.getElementById("buscarClienteBtn").addEventListener("click", buscarCliente);
 document.getElementById("btnAsistencia").addEventListener("click", confirmarAsistencia);
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+
+  const action = button.dataset.action;
+
+  if (action === "mostrar-clases") {
+    mostrarClases(button.dataset.dni);
+    return;
+  }
+
+  if (action === "eliminar-cliente") {
+    eliminarCliente(button.dataset.dni, button.dataset.nombre);
+    return;
+  }
+
+  if (action === "reprogramar-clase") {
+    reprogramarClase(button.dataset.id);
+  }
+});
 
 </script>
 

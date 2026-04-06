@@ -387,6 +387,11 @@ app.get("/horarios-disponibles", async (req, res) => {
     return res.json(result.rows);
 });
 
+app.get("/healthz", (req, res) => {
+    res.set("Access-Control-Allow-Origin", "*");
+    return res.status(200).json({ ok: true });
+});
+
 /* =====================================================
    ASISTENCIA
 ===================================================== */

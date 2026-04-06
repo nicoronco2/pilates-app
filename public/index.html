@@ -25,7 +25,7 @@
             background:
                 radial-gradient(circle at top left, rgba(196,109,66,0.16), transparent 26%),
                 linear-gradient(180deg, #faf5ee 0%, #f7f1e8 48%, #efe5d7 100%);
-            padding-bottom:88px;
+            padding-bottom:92px;
         }
 
         .topbar{
@@ -37,12 +37,22 @@
             border-bottom:1px solid rgba(45,36,31,0.08);
         }
 
+        .topbar-inner{
+            min-height:72px;
+        }
+
         .brand-mini{
-            font-size:.76rem;
-            letter-spacing:.16em;
+            font-size:.68rem;
+            letter-spacing:.14em;
             text-transform:uppercase;
             color:var(--muted);
-            margin-bottom:.15rem;
+            margin-bottom:.05rem;
+        }
+
+        .brand-title{
+            font-size:1.55rem;
+            line-height:1;
+            letter-spacing:-.04em;
         }
 
         .hero{
@@ -165,6 +175,13 @@
             transform:translateY(-2px);
         }
 
+        .map-link{
+            min-height:46px;
+            padding:.75rem 1rem;
+            border-radius:16px;
+            font-size:.95rem;
+        }
+
         .hero-logo-wrap{
             margin-top:1.3rem;
             padding:1rem;
@@ -284,25 +301,31 @@
 
         .sticky-cta{
             position:fixed;
-            left:0;
-            right:0;
-            bottom:0;
+            right:16px;
+            bottom:16px;
             z-index:30;
-            padding:.75rem 1rem calc(.75rem + env(safe-area-inset-bottom));
-            background:linear-gradient(180deg, rgba(247,241,232,0), rgba(247,241,232,0.96) 36%);
+            padding-bottom:env(safe-area-inset-bottom);
         }
 
         .sticky-cta a{
             display:flex;
             align-items:center;
             justify-content:center;
-            min-height:56px;
-            border-radius:18px;
+            width:62px;
+            height:62px;
+            border-radius:50%;
             text-decoration:none;
             color:#fff;
             font-weight:800;
             background:linear-gradient(135deg, #2fb15d, var(--green));
-            box-shadow:0 16px 26px rgba(32,158,88,0.28);
+            box-shadow:0 18px 26px rgba(32,158,88,0.34);
+            border:3px solid rgba(255,255,255,0.7);
+        }
+
+        .sticky-cta svg{
+            width:30px;
+            height:30px;
+            fill:currentColor;
         }
 
         @media (min-width: 768px){
@@ -311,18 +334,36 @@
             .quick-grid{ grid-template-columns:repeat(3, 1fr); }
             .sticky-cta{ display:none; }
         }
+
+        @media (max-width: 575.98px){
+            .topbar-inner{
+                min-height:64px;
+            }
+
+            .brand-title{
+                font-size:1.15rem;
+            }
+
+            .map-link{
+                width:auto;
+                align-self:flex-start;
+                min-height:42px;
+                padding:.65rem .95rem;
+                font-size:.9rem;
+            }
+        }
     </style>
 </head>
 <body>
 
 <nav class="topbar">
-    <div class="container py-3 d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between gap-3">
+    <div class="container topbar-inner py-2 d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between gap-2">
         <div>
             <div class="brand-mini">Ataraxia Estudio</div>
-            <div class="fw-bold fs-4">Pilates Reformer</div>
+            <div class="fw-bold brand-title">Pilates Reformer</div>
         </div>
 
-        <a href="https://maps.app.goo.gl/cyFBaynEZY4VtZri7" class="map-link px-4">
+        <a href="https://maps.app.goo.gl/cyFBaynEZY4VtZri7" class="map-link">
             Ubicación 📍
         </a>
     </div>
@@ -555,7 +596,10 @@
 
 <div class="sticky-cta">
     <a href="https://wa.me/5493513110462?text=Hola%21%20%C2%BFC%C3%B3mo%20est%C3%A1s%3F%20%0A%0AMe%20interesa%20empezar%20clases%20de%20pilates%20en%20Ataraxia.%0A%0A%C2%BFPodr%C3%ADas%20brindarme%20informaci%C3%B3n%20sobre%20las%20clases%2C%20horarios%20y%20disponibilidad%3F%0A%0A%C2%A1Muchas%20gracias%21%20">
-        Reservar por WhatsApp
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M19.11 17.2c-.28-.14-1.64-.81-1.89-.9-.25-.09-.43-.14-.62.14-.19.28-.72.9-.88 1.08-.16.19-.32.21-.6.07-.28-.14-1.17-.43-2.23-1.37-.82-.73-1.37-1.63-1.53-1.9-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.49.14-.16.19-.28.28-.46.09-.19.05-.35-.02-.49-.07-.14-.62-1.5-.85-2.05-.22-.53-.45-.46-.62-.47l-.53-.01c-.19 0-.49.07-.74.35-.25.28-.97.95-.97 2.31s.99 2.67 1.13 2.86c.14.19 1.95 2.98 4.72 4.18.66.28 1.17.45 1.57.58.66.21 1.26.18 1.73.11.53-.08 1.64-.67 1.87-1.31.23-.64.23-1.19.16-1.31-.07-.12-.25-.19-.53-.32Z"></path>
+            <path d="M16 3.2C8.93 3.2 3.2 8.88 3.2 15.88c0 2.24.6 4.43 1.73 6.35L3.2 28.8l6.76-1.77a12.84 12.84 0 0 0 6.04 1.51h.01c7.06 0 12.79-5.68 12.79-12.68C28.8 8.88 23.07 3.2 16 3.2Zm0 23.18h-.01a10.7 10.7 0 0 1-5.46-1.49l-.39-.23-4.01 1.05 1.07-3.89-.25-.4a10.5 10.5 0 0 1-1.63-5.54c0-5.83 4.79-10.57 10.69-10.57 2.85 0 5.52 1.1 7.53 3.09a10.42 10.42 0 0 1 3.14 7.48c0 5.83-4.8 10.58-10.69 10.58Z"></path>
+        </svg>
     </a>
 </div>
 

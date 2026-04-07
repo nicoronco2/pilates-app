@@ -193,6 +193,22 @@ function validarClase({ dia, hora }) {
     return null;
 }
 
+function obtenerFechaHoyArgentina() {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    });
+
+    const parts = formatter.formatToParts(new Date());
+    const year = parts.find(part => part.type === "year")?.value;
+    const month = parts.find(part => part.type === "month")?.value;
+    const day = parts.find(part => part.type === "day")?.value;
+
+    return `${year}-${month}-${day}`;
+}
+
 /* =====================================================
    LOGIN
 ===================================================== */
@@ -399,12 +415,7 @@ app.get("/healthz", (req, res) => {
 app.post("/asistencia", requireAdmin, async (req, res) => {
   const { dni, hora } = req.body;
   if (!dni) return res.status(400).send("DNI requerido");
-
-  const hoy = new Date();
-  const yyyy = hoy.getFullYear();
-  const mm = String(hoy.getMonth() + 1).padStart(2, "0");
-  const dd = String(hoy.getDate()).padStart(2, "0");
-  const fechaHoy = `${yyyy}-${mm}-${dd}`;
+  const fechaHoy = obtenerFechaHoyArgentina();
 
   let result;
   if (hora) {

@@ -108,13 +108,23 @@ function pintarClientes() {
           </button>
         </td>
         <td>
-          <button type="button"
-                  class="btn btn-sm btn-danger"
-                  data-action="eliminar-cliente"
-                  data-dni="${escapeHtml(dni)}"
-                  data-nombre="${escapeHtml(cli.nombre)}">
-            Eliminar
-          </button>
+          <div class="d-flex flex-wrap gap-2 justify-content-center">
+            <button type="button"
+                    class="btn btn-sm btn-outline-primary"
+                    data-action="editar-cliente"
+                    data-dni="${escapeHtml(dni)}"
+                    data-nombre="${escapeHtml(cli.nombre)}"
+                    data-telefono="${escapeHtml(cli.telefono)}">
+              Editar
+            </button>
+            <button type="button"
+                    class="btn btn-sm btn-danger"
+                    data-action="eliminar-cliente"
+                    data-dni="${escapeHtml(dni)}"
+                    data-nombre="${escapeHtml(cli.nombre)}">
+              Eliminar
+            </button>
+          </div>
         </td>
       </tr>`;
   });
@@ -352,6 +362,52 @@ async function eliminarCliente(dni, nombre) {
   }
 }
 
+async function editarCliente(dniActual, nombreActual, telefonoActual) {
+  const nombre = prompt("Nombre del cliente:", nombreActual);
+  if (nombre === null) return;
+
+  const nuevoDni = prompt("DNI del cliente:", dniActual);
+  if (nuevoDni === null) return;
+
+  const telefono = prompt("Teléfono del cliente:", telefonoActual);
+  if (telefono === null) return;
+
+  const nombreLimpio = nombre.trim();
+  const dniLimpio = nuevoDni.trim();
+  const telefonoLimpio = telefono.trim();
+
+  if (!nombreLimpio || !dniLimpio || !telefonoLimpio) {
+    return alert("Todos los datos son obligatorios");
+  }
+
+  const res = await fetch("/editar-cliente", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify({
+      dniActual,
+      nombre: nombreLimpio,
+      telefono: telefonoLimpio,
+      nuevoDni: dniLimpio
+    })
+  });
+
+  const text = await res.text();
+  alert(text);
+
+  if (!res.ok) return;
+
+  const dniBuscado = document.getElementById("dniInput").value.trim();
+  if (dniBuscado === dniActual || dniBuscado === dniLimpio) {
+    document.getElementById("dniInput").value = dniLimpio;
+  }
+
+  await cargarReservas();
+
+  if (document.getElementById("dniInput").value.trim()) {
+    await buscarCliente();
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   inicializarTema();
   cargarReservas();
@@ -375,6 +431,11 @@ document.addEventListener("click", (event) => {
 
   if (action === "eliminar-cliente") {
     eliminarCliente(button.dataset.dni, button.dataset.nombre);
+    return;
+  }
+
+  if (action === "editar-cliente") {
+    editarCliente(button.dataset.dni, button.dataset.nombre, button.dataset.telefono);
     return;
   }
 

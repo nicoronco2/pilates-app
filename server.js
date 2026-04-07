@@ -509,6 +509,69 @@ app.post("/eliminar-cliente", requireAdmin, async (req, res) => {
   return res.send("OK");
 });
 
+app.post("/editar-cliente", requireAdmin, async (req, res) => {
+  let { dniActual, nombre, telefono, nuevoDni } = req.body;
+
+  dniActual = validator.escape(String(dniActual || "")).trim();
+  nombre = validator.escape(String(nombre || "")).trim();
+  telefono = validator.escape(String(telefono || "")).trim();
+  nuevoDni = validator.escape(String(nuevoDni || "")).trim();
+
+  if (!dniActual || !nombre || !telefono || !nuevoDni) {
+    return res.status(400).send("Datos incompletos");
+  }
+
+  if (!esTextoNumerico(dniActual)) return res.status(400).send("DNI actual inválido");
+  if (!esTextoNumerico(nuevoDni)) return res.status(400).send("DNI inválido");
+  if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const clienteActual = await client.query(
+      "SELECT id FROM reservas WHERE dni = $1 LIMIT 1",
+      [dniActual]
+    );
+
+    if (clienteActual.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).send("Cliente no encontrado");
+    }
+
+    if (nuevoDni !== dniActual) {
+      const dniExistente = await client.query(
+        "SELECT id FROM reservas WHERE dni = $1 LIMIT 1",
+        [nuevoDni]
+      );
+
+      if (dniExistente.rowCount > 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).send("Ya existe un cliente con ese DNI");
+      }
+    }
+
+    const result = await client.query(
+      "UPDATE reservas SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
+      [nombre, telefono, nuevoDni, dniActual]
+    );
+
+    await client.query("COMMIT");
+
+    if (result.rowCount === 0) {
+      return res.status(404).send("Cliente no encontrado");
+    }
+
+    return res.send("Cliente actualizado correctamente");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/editar-cliente error:", err);
+    return res.status(500).send("Error interno");
+  } finally {
+    client.release();
+  }
+});
+
 /* =====================================================
    SERVER
 ===================================================== */

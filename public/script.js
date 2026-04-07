@@ -2,6 +2,31 @@
    GENERAR CLASES
 ========================================================= */
 
+const THEME_KEY = "pilates-theme";
+
+function aplicarTema(theme) {
+    document.documentElement.setAttribute("data-bs-theme", theme);
+    const themeToggleBtn = document.getElementById("themeToggleBtn");
+    if (themeToggleBtn) {
+        themeToggleBtn.textContent = theme === "dark" ? "Modo claro" : "Modo oscuro";
+    }
+}
+
+function inicializarTema() {
+    const savedTheme = localStorage.getItem(THEME_KEY) || "light";
+    aplicarTema(savedTheme);
+
+    const themeToggleBtn = document.getElementById("themeToggleBtn");
+    if (!themeToggleBtn) return;
+
+    themeToggleBtn.addEventListener("click", function () {
+        const currentTheme = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "dark" : "light";
+        const nextTheme = currentTheme === "dark" ? "light" : "dark";
+        localStorage.setItem(THEME_KEY, nextTheme);
+        aplicarTema(nextTheme);
+    });
+}
+
 function generarClases() {
 
     const packValue = document.getElementById("pack").value;
@@ -249,6 +274,7 @@ document.getElementById("formReserva").addEventListener("submit", async function
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+    inicializarTema();
     const selectPack = document.getElementById("pack");
 
     if (selectPack) {

@@ -4,6 +4,30 @@ let horaAsistenciaHoy = "";
 
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
+const THEME_KEY = "pilates-theme";
+
+function aplicarTema(theme) {
+  document.documentElement.setAttribute("data-bs-theme", theme);
+  const themeToggleBtn = document.getElementById("themeToggleBtn");
+  if (themeToggleBtn) {
+    themeToggleBtn.textContent = theme === "dark" ? "Modo claro" : "Modo oscuro";
+  }
+}
+
+function inicializarTema() {
+  const savedTheme = localStorage.getItem(THEME_KEY) || "light";
+  aplicarTema(savedTheme);
+
+  const themeToggleBtn = document.getElementById("themeToggleBtn");
+  if (!themeToggleBtn) return;
+
+  themeToggleBtn.addEventListener("click", () => {
+    const currentTheme = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "dark" : "light";
+    const nextTheme = currentTheme === "dark" ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, nextTheme);
+    aplicarTema(nextTheme);
+  });
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -317,7 +341,10 @@ async function eliminarCliente(dni, nombre) {
   }
 }
 
-document.addEventListener("DOMContentLoaded", cargarReservas);
+document.addEventListener("DOMContentLoaded", () => {
+  inicializarTema();
+  cargarReservas();
+});
 
 document.getElementById("btnSemanaAnt").addEventListener("click", () => cambiarSemana(-1));
 document.getElementById("btnSemanaAct").addEventListener("click", irSemanaActual);

@@ -17,7 +17,7 @@ services:
         sync: false
 
   - type: web
-    name: pilates-entry
+    name: ataraxia-pilates-web
     runtime: static
     buildCommand: ""
     staticPublishPath: ./wakeup-site

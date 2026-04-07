@@ -218,44 +218,40 @@
             border-radius:28px;
             overflow:hidden;
             box-shadow:0 24px 44px rgba(76,52,39,0.18);
-            background:#eadfce;
+            background:linear-gradient(180deg, #eadfce, #e4d5c3);
         }
 
         .studio-carousel .carousel-item{
             position:relative;
+            padding:18px;
         }
 
         .studio-carousel .carousel-item::after{
             content:"";
             position:absolute;
-            inset:0;
+            inset:18px;
             background:linear-gradient(180deg, rgba(32,24,20,0.02), rgba(32,24,20,0.28));
+            border-radius:24px;
             pointer-events:none;
+        }
+
+        .carousel-photo{
+            width:100%;
+            border:0;
+            padding:0;
+            display:block;
+            background:transparent;
+            cursor:zoom-in;
         }
 
         .studio-carousel img{
             width:100%;
-            height:clamp(320px, 62vw, 620px);
-            object-fit:cover;
+            height:clamp(320px, 56vw, 620px);
+            object-fit:contain;
             object-position:center;
             display:block;
-        }
-
-        .gallery-chip{
-            position:absolute;
-            left:16px;
-            bottom:16px;
-            z-index:2;
-            display:inline-flex;
-            align-items:center;
-            gap:.45rem;
-            padding:.65rem .95rem;
-            border-radius:999px;
-            background:rgba(255,253,249,0.9);
-            color:var(--text);
-            font-size:.9rem;
-            font-weight:800;
-            box-shadow:0 12px 24px rgba(0,0,0,0.12);
+            border-radius:24px;
+            background:rgba(255,250,245,0.55);
         }
 
         .studio-carousel .carousel-indicators{
@@ -479,14 +475,6 @@
                 height:360px;
             }
 
-            .gallery-chip{
-                left:12px;
-                right:12px;
-                bottom:74px;
-                justify-content:center;
-                font-size:.84rem;
-            }
-
             .studio-carousel .carousel-control-prev,
             .studio-carousel .carousel-control-next{
                 width:46px;
@@ -501,6 +489,28 @@
             .studio-carousel .carousel-control-next{
                 right:14px;
             }
+        }
+
+        .photo-modal .modal-content{
+            background:rgba(22,17,14,0.96);
+            border:1px solid rgba(255,255,255,0.12);
+            border-radius:28px;
+        }
+
+        .photo-modal .btn-close{
+            filter:invert(1) grayscale(1) brightness(1.3);
+        }
+
+        .photo-modal-body{
+            padding:18px;
+        }
+
+        .photo-modal-body img{
+            width:100%;
+            max-height:82vh;
+            object-fit:contain;
+            border-radius:20px;
+            background:#201915;
         }
     </style>
 </head>
@@ -591,13 +601,29 @@
 
                 <div class="carousel-inner">
                     <div class="carousel-item active">
-                        <img src="/imagen-local1.png" alt="Vista del estudio Ataraxia Pilates">
-                        <div class="gallery-chip">Deslizá para ver más fotos del estudio</div>
+                        <button
+                            type="button"
+                            class="carousel-photo"
+                            data-bs-toggle="modal"
+                            data-bs-target="#photoModal"
+                            data-photo-src="/imagen-local1.png"
+                            data-photo-alt="Vista del estudio Ataraxia Pilates"
+                        >
+                            <img src="/imagen-local1.png" alt="Vista del estudio Ataraxia Pilates">
+                        </button>
                     </div>
 
                     <div class="carousel-item">
-                        <img src="/imagen-local2.png" alt="Espacio de práctica en Ataraxia Pilates">
-                        <div class="gallery-chip">Un espacio pensado para entrenar con calma</div>
+                        <button
+                            type="button"
+                            class="carousel-photo"
+                            data-bs-toggle="modal"
+                            data-bs-target="#photoModal"
+                            data-photo-src="/imagen-local2.png"
+                            data-photo-alt="Espacio de práctica en Ataraxia Pilates"
+                        >
+                            <img src="/imagen-local2.png" alt="Espacio de práctica en Ataraxia Pilates">
+                        </button>
                     </div>
                 </div>
 
@@ -781,6 +807,20 @@
     </div>
 </footer>
 
+<div class="modal fade photo-modal" id="photoModal" tabindex="-1" aria-labelledby="photoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h2 class="modal-title fs-5 text-white" id="photoModalLabel">Galería del estudio</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body photo-modal-body pt-2">
+                <img id="photoModalImage" src="" alt="">
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="sticky-cta">
     <a href="https://wa.me/5493513110462?text=Hola%21%20%C2%BFC%C3%B3mo%20est%C3%A1s%3F%20%0A%0AMe%20interesa%20empezar%20clases%20de%20pilates%20en%20Ataraxia.%0A%0A%C2%BFPodr%C3%ADas%20brindarme%20informaci%C3%B3n%20sobre%20las%20clases%2C%20horarios%20y%20disponibilidad%3F%0A%0A%C2%A1Muchas%20gracias%21%20">
         <svg viewBox="0 0 32 32" aria-hidden="true">
@@ -791,5 +831,14 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.querySelectorAll(".carousel-photo").forEach((button) => {
+        button.addEventListener("click", () => {
+            const modalImage = document.getElementById("photoModalImage");
+            modalImage.src = button.dataset.photoSrc;
+            modalImage.alt = button.dataset.photoAlt;
+        });
+    });
+</script>
 </body>
 </html>

@@ -497,6 +497,19 @@
             border-radius:28px;
         }
 
+        .photo-modal .modal-dialog{
+            max-width:min(1100px, calc(100vw - 2rem));
+        }
+
+        .photo-modal .modal-header{
+            align-items:center;
+            padding:1rem 1rem 0;
+        }
+
+        .photo-modal .modal-title{
+            letter-spacing:-.02em;
+        }
+
         .photo-modal .btn-close{
             filter:invert(1) grayscale(1) brightness(1.3);
         }
@@ -511,6 +524,45 @@
             object-fit:contain;
             border-radius:20px;
             background:#201915;
+        }
+
+        @media (max-width: 575.98px){
+            .photo-modal .modal{
+                padding:0 !important;
+            }
+
+            .photo-modal .modal-dialog{
+                margin:0;
+                max-width:100vw;
+                height:100vh;
+            }
+
+            .photo-modal .modal-content{
+                min-height:100vh;
+                border-radius:0;
+                border:0;
+            }
+
+            .photo-modal .modal-header{
+                padding:.75rem .75rem 0;
+                justify-content:flex-end;
+            }
+
+            .photo-modal .modal-title{
+                display:none;
+            }
+
+            .photo-modal-body{
+                padding:.75rem .75rem 1rem;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+            }
+
+            .photo-modal-body img{
+                max-height:calc(100vh - 3.5rem);
+                border-radius:16px;
+            }
         }
     </style>
 </head>

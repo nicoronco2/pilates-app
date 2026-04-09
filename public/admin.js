@@ -5,6 +5,7 @@ let horaAsistenciaHoy = "";
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
 const THEME_KEY = "pilates-theme";
+const UMBRAL_PACK_POR_VENCER = 2;
 
 function aplicarTema(theme) {
   document.documentElement.setAttribute("data-bs-theme", theme);
@@ -60,6 +61,71 @@ function formatearFecha(fechaTexto) {
   return `${day}/${month}/${year}`;
 }
 
+function obtenerEstadoPack(restantes) {
+  const numeroRestantes = Number(restantes) || 0;
+
+  if (numeroRestantes <= 0) {
+    return {
+      texto: "Pack agotado",
+      clase: "bg-dark-subtle text-dark"
+    };
+  }
+
+  if (numeroRestantes <= UMBRAL_PACK_POR_VENCER) {
+    return {
+      texto: `Quedan ${numeroRestantes} clase${numeroRestantes === 1 ? "" : "s"}`,
+      clase: "bg-danger-subtle text-danger-emphasis"
+    };
+  }
+
+  if (numeroRestantes <= 4) {
+    return {
+      texto: "Conviene avisar renovacion",
+      clase: "bg-warning-subtle text-warning-emphasis"
+    };
+  }
+
+  return {
+    texto: "Pack en curso",
+    clase: "bg-success-subtle text-success-emphasis"
+  };
+}
+
+function renderizarPacksPorVencer() {
+  const contenedor = document.getElementById("packsPorVencer");
+  if (!contenedor) return;
+
+  const clientesEnRiesgo = Object.keys(clientesGlobal)
+    .map((dni) => {
+      const lista = clientesGlobal[dni];
+      const cliente = lista[0];
+      const restantes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
+      return { cliente, restantes };
+    })
+    .filter(({ restantes }) => restantes > 0 && restantes <= UMBRAL_PACK_POR_VENCER)
+    .sort((a, b) => a.restantes - b.restantes || String(a.cliente.nombre).localeCompare(String(b.cliente.nombre)));
+
+  if (clientesEnRiesgo.length === 0) {
+    contenedor.innerHTML = `
+      <div class="alert alert-success warning-summary mb-0">
+        No hay packs por vencer en este momento.
+      </div>
+    `;
+    return;
+  }
+
+  const items = clientesEnRiesgo
+    .map(({ cliente, restantes }) => `<li><strong>${escapeHtml(cliente.nombre)}</strong> (${escapeHtml(cliente.dni)}) - quedan ${restantes} clase${restantes === 1 ? "" : "s"}.</li>`)
+    .join("");
+
+  contenedor.innerHTML = `
+    <div class="alert alert-warning warning-summary mb-0">
+      <strong>Packs por vencer:</strong>
+      <ul class="mt-2">${items}</ul>
+    </div>
+  `;
+}
+
 async function cargarReservas() {
   const r = await fetch("/reservas", { ...opcionesFetch, cache: "no-store" });
   if (r.status === 401 || r.status === 403) return window.location = "/login";
@@ -83,7 +149,8 @@ function pintarClientes() {
 
   const keys = Object.keys(clientesGlobal).sort();
   if (keys.length === 0) {
-    tabla.innerHTML = "<tr><td colspan='8'>No hay clientes</td></tr>";
+    tabla.innerHTML = "<tr><td colspan='9'>No hay clientes</td></tr>";
+    renderizarPacksPorVencer();
     return;
   }
 
@@ -91,6 +158,7 @@ function pintarClientes() {
     const lista = clientesGlobal[dni];
     const cli = lista[0];
     const restantes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
+    const recordatorio = obtenerEstadoPack(restantes);
     tabla.innerHTML += `
       <tr>
         <td>${escapeHtml(cli.nombre)}</td>
@@ -99,6 +167,9 @@ function pintarClientes() {
         <td>${escapeHtml(cli.pack)}</td>
         <td>${lista.length}</td>
         <td>${restantes}</td>
+        <td>
+          <span class="badge rounded-pill ${recordatorio.clase}">${recordatorio.texto}</span>
+        </td>
         <td>
           <button type="button"
                   class="btn btn-sm btn-primary"
@@ -128,6 +199,8 @@ function pintarClientes() {
         </td>
       </tr>`;
   });
+
+  renderizarPacksPorVencer();
 }
 
 function obtenerLunes() {

@@ -3,6 +3,7 @@
 ========================================================= */
 
 const THEME_KEY = "pilates-theme";
+let clasesPrefillPendientes = [];
 
 function aplicarTema(theme) {
     document.documentElement.setAttribute("data-bs-theme", theme);
@@ -88,6 +89,11 @@ function generarClases() {
             cambiarHorarios(this);
         });
     });
+
+    if (clasesPrefillPendientes.length === pack) {
+        aplicarClasesPrefill(clasesPrefillPendientes);
+        clasesPrefillPendientes = [];
+    }
 }
 
 /* =========================================================
@@ -182,6 +188,68 @@ async function cambiarHorarios(inputFecha) {
         console.error("horarios-disponibles:", error);
         selectHora.innerHTML = "<option>Error cargando horarios</option>";
     }
+}
+
+async function aplicarClasesPrefill(clases) {
+    const fechas = document.querySelectorAll(".fecha");
+    const horas = document.querySelectorAll(".hora");
+    let clasesNoDisponibles = 0;
+
+    for (let i = 0; i < clases.length; i++) {
+        if (!fechas[i] || !horas[i]) continue;
+
+        fechas[i].value = clases[i].dia;
+        await cambiarHorarios(fechas[i]);
+
+        const existeHorario = Array.from(horas[i].options).some(option => option.value === clases[i].hora);
+        if (existeHorario) {
+            horas[i].value = clases[i].hora;
+        } else {
+            clasesNoDisponibles++;
+        }
+    }
+
+    const prefillNotice = document.getElementById("prefillNotice");
+    if (prefillNotice && clasesNoDisponibles > 0) {
+        prefillNotice.classList.remove("d-none", "alert-info");
+        prefillNotice.classList.add("alert-warning");
+        prefillNotice.textContent = "Algunas clases sugeridas ya no están disponibles y vas a tener que elegir otro horario.";
+    }
+}
+
+function aplicarPrefillDesdeURL() {
+    const params = new URLSearchParams(window.location.search);
+    const nombre = params.get("nombre");
+    const telefono = params.get("telefono");
+    const dni = params.get("dni");
+    const pack = params.get("pack");
+    const modo = params.get("modo");
+    const clases = params.get("clases");
+    const prefillNotice = document.getElementById("prefillNotice");
+
+    if (nombre) document.getElementById("nombre").value = nombre;
+    if (telefono) document.getElementById("telefono").value = telefono;
+    if (dni) document.getElementById("dni").value = dni;
+
+    if (prefillNotice && modo === "renovacion") {
+        prefillNotice.classList.remove("d-none");
+        prefillNotice.textContent = "Renovación en curso: revisá el pack y confirmá las fechas antes de guardar.";
+    }
+
+    if (!pack) return;
+
+    const selectPack = document.getElementById("pack");
+    selectPack.value = pack;
+
+    if (clases) {
+        try {
+            clasesPrefillPendientes = JSON.parse(clases);
+        } catch (error) {
+            console.error("No se pudieron leer las clases sugeridas:", error);
+        }
+    }
+
+    generarClases();
 }
 
 /* =========================================================
@@ -280,4 +348,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (selectPack) {
         selectPack.addEventListener("change", generarClases);
     }
+
+    aplicarPrefillDesdeURL();
 });

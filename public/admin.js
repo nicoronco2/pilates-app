@@ -9,6 +9,14 @@ const opcionesFetch = { credentials: "include", headers: { "Content-Type": "appl
 const THEME_KEY = "pilates-theme";
 const UMBRAL_PACK_POR_VENCER = 2;
 
+function clasesPorSemana(pack) {
+  if (Number(pack) === 4) return 1;
+  if (Number(pack) === 8) return 2;
+  if (Number(pack) === 12) return 3;
+  if (Number(pack) === 16) return 4;
+  return 1;
+}
+
 function aplicarTema(theme) {
   document.documentElement.setAttribute("data-bs-theme", theme);
   const themeToggleBtn = document.getElementById("themeToggleBtn");
@@ -63,6 +71,21 @@ function formatearFecha(fechaTexto) {
   return `${day}/${month}/${year}`;
 }
 
+function sumarDias(fechaTexto, dias) {
+  const [year, month, day] = String(fechaTexto).split("-").map(Number);
+  const fecha = new Date(year, month - 1, day);
+  fecha.setDate(fecha.getDate() + dias);
+  const yyyy = fecha.getFullYear();
+  const mm = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dd = String(fecha.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function diaSemanaDesdeFecha(fechaTexto) {
+  const [year, month, day] = String(fechaTexto).split("-").map(Number);
+  return new Date(year, month - 1, day).getDay();
+}
+
 function obtenerEstadoPack(restantes) {
   const numeroRestantes = Number(restantes) || 0;
 
@@ -97,6 +120,70 @@ function obtenerEstadoPack(restantes) {
   };
 }
 
+function obtenerSugerenciaRenovacion(lista, packObjetivo = null) {
+  const clasesOrdenadas = ordenarClasesPorFecha(lista);
+  if (!clasesOrdenadas.length) return null;
+
+  const pack = Number(packObjetivo || clasesOrdenadas[0].pack);
+  const objetivoSemanal = clasesPorSemana(pack);
+  const ultimaClase = clasesOrdenadas[clasesOrdenadas.length - 1];
+  const ultimaFecha = ultimaClase.dia;
+
+  const slots = [];
+  const vistos = new Set();
+  for (const reserva of clasesOrdenadas) {
+    const slotKey = `${diaSemanaDesdeFecha(reserva.dia)}|${reserva.hora}`;
+    if (!vistos.has(slotKey)) {
+      vistos.add(slotKey);
+      slots.push({
+        diaSemana: diaSemanaDesdeFecha(reserva.dia),
+        hora: reserva.hora
+      });
+    }
+  }
+
+  const slotsUsados = slots
+    .sort((a, b) => a.diaSemana - b.diaSemana || a.hora.localeCompare(b.hora))
+    .slice(0, objetivoSemanal);
+
+  if (!slotsUsados.length) return null;
+
+  const sugeridas = [];
+  let cursor = sumarDias(ultimaFecha, 1);
+  while (sugeridas.length < pack) {
+    const diaCursor = diaSemanaDesdeFecha(cursor);
+    slotsUsados.forEach((slot) => {
+      if (slot.diaSemana === diaCursor && sugeridas.length < pack) {
+        sugeridas.push({
+          dia: cursor,
+          hora: slot.hora
+        });
+      }
+    });
+    cursor = sumarDias(cursor, 1);
+  }
+
+  return {
+    fechaLimite: sugeridas[0]?.dia || null,
+    clases: sugeridas
+  };
+}
+
+function obtenerEstadoRenovacion(lista) {
+  const pendientes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
+  if (pendientes > 0) {
+    return null;
+  }
+
+  const sugerencia = obtenerSugerenciaRenovacion(lista);
+  if (!sugerencia?.fechaLimite) return null;
+
+  return {
+    texto: `Cobrar antes del ${formatearFecha(sugerencia.fechaLimite)}`,
+    fechaLimite: sugerencia.fechaLimite
+  };
+}
+
 function obtenerClientesProcesados() {
   return Object.keys(clientesGlobal)
     .sort((a, b) => a.localeCompare(b))
@@ -105,13 +192,15 @@ function obtenerClientesProcesados() {
       const cli = lista[0];
       const restantes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
       const recordatorio = obtenerEstadoPack(restantes);
+      const renovacion = obtenerEstadoRenovacion(lista);
 
       return {
         dni,
         lista,
         cli,
         restantes,
-        recordatorio
+        recordatorio,
+        renovacion
       };
     });
 }
@@ -201,6 +290,7 @@ function renderizarMetricasAdmin() {
     .filter((reserva) => reserva.dia === hoy);
   const pendientesHoy = clasesHoy.filter((reserva) => reserva.asistida == 0).length;
   const packsPorVencer = clientes.filter(({ restantes }) => restantes > 0 && restantes <= UMBRAL_PACK_POR_VENCER).length;
+  const cobrosPendientes = clientes.filter(({ renovacion }) => Boolean(renovacion)).length;
 
   const ocupacionPorHorario = {};
   Object.values(clientesGlobal).flat().forEach((reserva) => {
@@ -239,6 +329,11 @@ function renderizarMetricasAdmin() {
       label: "Packs por vencer",
       value: packsPorVencer,
       help: packsPorVencer > 0 ? "Clientes con 1 o 2 clases restantes." : "No hay renovaciones urgentes."
+    },
+    {
+      label: "Cobros por renovar",
+      value: cobrosPendientes,
+      help: cobrosPendientes > 0 ? "Clientes que ya terminaron el pack y pueden renovar." : "No hay cobros de renovación pendientes."
     },
     {
       label: "Horario mas cargado",
@@ -351,7 +446,7 @@ function pintarClientes() {
     return;
   }
 
-  clientesFiltrados.forEach(({ dni, lista, cli, restantes, recordatorio }) => {
+  clientesFiltrados.forEach(({ dni, lista, cli, restantes, recordatorio, renovacion }) => {
     tabla.innerHTML += `
       <tr>
         <td>${escapeHtml(cli.nombre)}</td>
@@ -362,6 +457,7 @@ function pintarClientes() {
         <td>${restantes}</td>
         <td>
           <span class="badge rounded-pill ${recordatorio.clase}">${recordatorio.texto}</span>
+          ${renovacion ? `<span class="renew-note">${escapeHtml(renovacion.texto)}</span>` : ""}
         </td>
         <td>
           <button type="button"
@@ -380,6 +476,12 @@ function pintarClientes() {
                     data-nombre="${escapeHtml(cli.nombre)}"
                     data-telefono="${escapeHtml(cli.telefono)}">
               Editar
+            </button>
+            <button type="button"
+                    class="btn btn-sm btn-outline-success"
+                    data-action="renovar-cliente"
+                    data-dni="${escapeHtml(dni)}">
+              Renovar
             </button>
             <button type="button"
                     class="btn btn-sm btn-danger"
@@ -536,6 +638,7 @@ function mostrarClases(dni) {
   const hoy = obtenerFechaHoy();
   const proximaClase = pendientes.find((reserva) => `${reserva.dia}|${reserva.hora}` >= `${hoy}|00:00`) || pendientes[0] || null;
   const estadoPack = obtenerEstadoPack(pendientes.length);
+  const renovacion = obtenerEstadoRenovacion(clasesOrdenadas);
 
   panel.innerHTML = `
     <div class="client-history-card">
@@ -548,6 +651,7 @@ function mostrarClases(dni) {
           ${estadoPack.texto}
         </span>
       </div>
+      ${renovacion ? `<div class="alert alert-warning py-2 mb-3">${escapeHtml(renovacion.texto)}. La renovación debería quedar confirmada antes de la próxima clase sugerida.</div>` : ""}
 
       <div class="history-metrics mb-3">
         <div class="history-metric">
@@ -639,7 +743,7 @@ async function buscarCliente() {
       <table class="table table-bordered">
         <thead class="table-dark">
           <tr>
-            <th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th><th>Asistidas</th><th>Estado</th><th>Ver clases</th>
+            <th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th><th>Asistidas</th><th>Estado</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -650,13 +754,23 @@ async function buscarCliente() {
             <td>${escapeHtml(cliente.pack)}</td>
             <td>${restantes}</td>
             <td>${asistidas}</td>
-            <td><span class="badge rounded-pill ${estadoPack.clase}">${estadoPack.texto}</span></td>
             <td>
-              <button type="button" class="btn btn-sm btn-primary"
-                      data-action="mostrar-clases"
-                      data-dni="${escapeHtml(cliente.dni)}">
-                Ver clases
-              </button>
+              <span class="badge rounded-pill ${estadoPack.clase}">${estadoPack.texto}</span>
+              ${obtenerEstadoRenovacion(lista) ? `<span class="renew-note">${escapeHtml(obtenerEstadoRenovacion(lista).texto)}</span>` : ""}
+            </td>
+            <td>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-primary"
+                        data-action="mostrar-clases"
+                        data-dni="${escapeHtml(cliente.dni)}">
+                  Ver clases
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success"
+                        data-action="renovar-cliente"
+                        data-dni="${escapeHtml(cliente.dni)}">
+                  Renovar
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -664,6 +778,47 @@ async function buscarCliente() {
     </div>`;
 
   mostrarClases(cliente.dni);
+}
+
+function renovarCliente(dni) {
+  const lista = clientesGlobal[String(dni)] || [];
+  if (!lista.length) {
+    alert("Cliente no encontrado");
+    return;
+  }
+
+  const pendientes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
+  if (pendientes > 0) {
+    alert("Primero tiene que terminar el pack actual para poder renovarlo.");
+    return;
+  }
+
+  const cliente = lista[0];
+  const packActual = String(cliente.pack);
+  const nuevoPack = prompt("Elegí el nuevo pack (4, 8, 12 o 16):", packActual);
+  if (nuevoPack === null) return;
+
+  if (!["4", "8", "12", "16"].includes(nuevoPack.trim())) {
+    alert("Pack inválido");
+    return;
+  }
+
+  const params = new URLSearchParams({
+    nombre: cliente.nombre,
+    telefono: cliente.telefono,
+    dni: cliente.dni,
+    pack: nuevoPack.trim(),
+    modo: "renovacion"
+  });
+
+  if (nuevoPack.trim() === packActual) {
+    const sugerencia = obtenerSugerenciaRenovacion(lista, Number(nuevoPack.trim()));
+    if (sugerencia?.clases?.length) {
+      params.set("clases", JSON.stringify(sugerencia.clases));
+    }
+  }
+
+  window.location.href = `/reservar.html?${params.toString()}`;
 }
 
 async function reprogramarClase(id) {
@@ -845,6 +1000,11 @@ document.addEventListener("click", (event) => {
 
   if (action === "editar-cliente") {
     editarCliente(button.dataset.dni, button.dataset.nombre, button.dataset.telefono);
+    return;
+  }
+
+  if (action === "renovar-cliente") {
+    renovarCliente(button.dataset.dni);
     return;
   }
 

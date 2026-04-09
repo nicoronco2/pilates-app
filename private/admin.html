@@ -70,9 +70,89 @@
             font-size:.95rem;
         }
 
+        .client-history-card{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:18px;
+            padding:18px;
+            background:rgba(248,249,250,0.9);
+        }
+
+        .history-metrics{
+            display:grid;
+            gap:12px;
+            grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+        }
+
+        .history-metric{
+            border-radius:14px;
+            padding:14px;
+            background:rgba(255,255,255,0.95);
+            border:1px solid rgba(0,0,0,0.08);
+        }
+
+        .history-metric-label{
+            color:#6c757d;
+            font-size:.84rem;
+            margin-bottom:4px;
+        }
+
+        .history-metric-value{
+            font-size:1.45rem;
+            font-weight:700;
+            line-height:1;
+        }
+
+        .history-block{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:16px;
+            padding:14px;
+            background:rgba(255,255,255,0.92);
+        }
+
+        .history-list{
+            display:grid;
+            gap:10px;
+        }
+
+        .history-item{
+            border-radius:14px;
+            padding:12px;
+            border:1px solid rgba(0,0,0,0.08);
+            background:#fff;
+        }
+
+        .history-item-header{
+            display:flex;
+            flex-wrap:wrap;
+            justify-content:space-between;
+            gap:8px;
+        }
+
+        .history-item-meta{
+            color:#6c757d;
+            font-size:.92rem;
+        }
+
         [data-bs-theme="dark"] .filters-panel{
             background:#141922;
             border-color:#2a313a;
+        }
+
+        [data-bs-theme="dark"] .client-history-card,
+        [data-bs-theme="dark"] .history-block{
+            background:#141922;
+            border-color:#2a313a;
+        }
+
+        [data-bs-theme="dark"] .history-metric,
+        [data-bs-theme="dark"] .history-item{
+            background:#1a1f26;
+            border-color:#2a313a;
+        }
+
+        [data-bs-theme="dark"] .history-metric-label,
+        [data-bs-theme="dark"] .history-item-meta{
+            color:#adb5bd;
         }
 
         @media (max-width:768px){

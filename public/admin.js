@@ -360,6 +360,44 @@ function limpiarFiltrosClientes() {
   pintarClientes();
 }
 
+function ordenarClasesPorFecha(lista) {
+  return [...lista].sort((a, b) => `${a.dia}|${a.hora}`.localeCompare(`${b.dia}|${b.hora}`));
+}
+
+function crearItemsHistorial(lista, { permitirReprogramar = false, vacio = "Sin clases para mostrar." } = {}) {
+  if (!lista.length) {
+    return `<p class="mb-0 text-body-secondary">${vacio}</p>`;
+  }
+
+  return `
+    <div class="history-list">
+      ${lista.map((reserva) => `
+        <div class="history-item">
+          <div class="history-item-header">
+            <div>
+              <strong>${formatearFecha(reserva.dia)}</strong>
+              <div class="history-item-meta">Horario ${escapeHtml(reserva.hora)}</div>
+            </div>
+            <div class="d-flex align-items-start gap-2 flex-wrap">
+              <span class="badge rounded-pill ${reserva.asistida == 1 ? "bg-success-subtle text-success-emphasis" : "bg-warning-subtle text-warning-emphasis"}">
+                ${reserva.asistida == 1 ? "Asistio" : "Pendiente"}
+              </span>
+              ${permitirReprogramar ? `
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary"
+                        data-action="reprogramar-clase"
+                        data-id="${escapeHtml(reserva.id)}">
+                  Reprogramar
+                </button>
+              ` : ""}
+            </div>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function mostrarClases(dni) {
   const lista = clientesGlobal[String(dni)] || [];
   if (!lista.length) return alert("No hay clases para ese cliente");
@@ -367,47 +405,79 @@ function mostrarClases(dni) {
   const panel = document.getElementById("panelClasesBuscado");
   if (!panel) return;
 
-  let html = `
-    <h5>Clases de ${escapeHtml(dni)}</h5>
-    <div class="table-responsive">
-      <table class="table table-sm table-bordered">
-        <thead class="table-dark">
-          <tr>
-            <th>#</th><th>Día</th><th>Hora</th><th>Estado</th><th>Acción</th>
-          </tr>
-        </thead>
-        <tbody>
-  `;
+  const clasesOrdenadas = ordenarClasesPorFecha(lista);
+  const cliente = clasesOrdenadas[0];
+  const pendientes = clasesOrdenadas.filter((reserva) => reserva.asistida == 0);
+  const asistidas = clasesOrdenadas.filter((reserva) => reserva.asistida == 1);
+  const hoy = obtenerFechaHoy();
+  const proximaClase = pendientes.find((reserva) => `${reserva.dia}|${reserva.hora}` >= `${hoy}|00:00`) || pendientes[0] || null;
+  const estadoPack = obtenerEstadoPack(pendientes.length);
 
-  lista.forEach((reserva, idx) => {
-    const asistencia = reserva.asistida == 1 ? "Asistió" : "Pendiente";
-    const rowClass = reserva.asistida == 1 ? "table-success" : "table-warning text-dark";
+  panel.innerHTML = `
+    <div class="client-history-card">
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+        <div>
+          <h5 class="mb-1">Historial de ${escapeHtml(cliente.nombre)}</h5>
+          <div class="text-body-secondary">DNI ${escapeHtml(cliente.dni)} · Tel. ${escapeHtml(cliente.telefono)}</div>
+        </div>
+        <span class="badge rounded-pill ${estadoPack.clase} align-self-start">
+          ${estadoPack.texto}
+        </span>
+      </div>
 
-    html += `
-      <tr class="${rowClass}">
-        <td>${idx + 1}</td>
-        <td>${escapeHtml(reserva.dia)}</td>
-        <td>${escapeHtml(reserva.hora)}</td>
-        <td>${asistencia}</td>
-        <td>
-          <button type="button"
-                  class="btn btn-sm btn-outline-secondary"
-                  data-action="reprogramar-clase"
-                  data-id="${escapeHtml(reserva.id)}">
-            Reprogramar
-          </button>
-        </td>
-      </tr>
-    `;
-  });
+      <div class="history-metrics mb-3">
+        <div class="history-metric">
+          <div class="history-metric-label">Pack</div>
+          <div class="history-metric-value">${escapeHtml(cliente.pack)}</div>
+        </div>
+        <div class="history-metric">
+          <div class="history-metric-label">Total reservadas</div>
+          <div class="history-metric-value">${clasesOrdenadas.length}</div>
+        </div>
+        <div class="history-metric">
+          <div class="history-metric-label">Pendientes</div>
+          <div class="history-metric-value">${pendientes.length}</div>
+        </div>
+        <div class="history-metric">
+          <div class="history-metric-label">Asistidas</div>
+          <div class="history-metric-value">${asistidas.length}</div>
+        </div>
+      </div>
 
-  html += `
-        </tbody>
-      </table>
+      <div class="row g-3">
+        <div class="col-12 col-xl-4">
+          <div class="history-block h-100">
+            <h6 class="mb-3">Proxima clase</h6>
+            ${proximaClase ? `
+              <div class="history-item">
+                <div class="history-item-header">
+                  <div>
+                    <strong>${formatearFecha(proximaClase.dia)}</strong>
+                    <div class="history-item-meta">Horario ${escapeHtml(proximaClase.hora)}</div>
+                  </div>
+                  <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis">Agendada</span>
+                </div>
+              </div>
+            ` : `<p class="mb-0 text-body-secondary">No tiene clases pendientes.</p>`}
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-4">
+          <div class="history-block h-100">
+            <h6 class="mb-3">Clases pendientes</h6>
+            ${crearItemsHistorial(pendientes, { permitirReprogramar: true, vacio: "No hay clases pendientes." })}
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-4">
+          <div class="history-block h-100">
+            <h6 class="mb-3">Clases asistidas</h6>
+            ${crearItemsHistorial(asistidas, { vacio: "Todavia no registra asistencias." })}
+          </div>
+        </div>
+      </div>
     </div>
   `;
-
-  panel.innerHTML = html;
 }
 
 async function buscarCliente() {
@@ -426,6 +496,8 @@ async function buscarCliente() {
 
   const cliente = lista[0];
   const restantes = lista.filter((item) => item.asistida == 0).length;
+  const asistidas = lista.filter((item) => item.asistida == 1).length;
+  const estadoPack = obtenerEstadoPack(restantes);
   const hoyPendiente = lista
     .filter((item) => item.dia === obtenerFechaHoy() && item.asistida == 0)
     .sort((a, b) => a.hora.localeCompare(b.hora))[0];
@@ -433,7 +505,7 @@ async function buscarCliente() {
   horaAsistenciaHoy = hoyPendiente ? hoyPendiente.hora : "";
 
   document.getElementById("infoCliente").innerHTML =
-    `<strong>Nombre:</strong> ${escapeHtml(cliente.nombre)} | <strong>Restantes:</strong> ${restantes}` +
+    `<strong>Nombre:</strong> ${escapeHtml(cliente.nombre)} | <strong>Restantes:</strong> ${restantes} | <strong>Asistidas:</strong> ${asistidas} | <strong>Estado:</strong> ${escapeHtml(estadoPack.texto)}` +
     (horaAsistenciaHoy ? ` | <strong>Clase hoy:</strong> ${escapeHtml(horaAsistenciaHoy)}` : "");
 
   document.getElementById("btnAsistencia").style.display = horaAsistenciaHoy ? "block" : "none";
@@ -443,7 +515,7 @@ async function buscarCliente() {
       <table class="table table-bordered">
         <thead class="table-dark">
           <tr>
-            <th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th><th>Ver clases</th>
+            <th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th><th>Asistidas</th><th>Estado</th><th>Ver clases</th>
           </tr>
         </thead>
         <tbody>
@@ -453,6 +525,8 @@ async function buscarCliente() {
             <td>${escapeHtml(cliente.telefono)}</td>
             <td>${escapeHtml(cliente.pack)}</td>
             <td>${restantes}</td>
+            <td>${asistidas}</td>
+            <td><span class="badge rounded-pill ${estadoPack.clase}">${estadoPack.texto}</span></td>
             <td>
               <button type="button" class="btn btn-sm btn-primary"
                       data-action="mostrar-clases"

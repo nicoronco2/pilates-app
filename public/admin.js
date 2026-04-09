@@ -5,6 +5,8 @@ let clientesFiltrados = [];
 let listaEsperaGlobal = [];
 let ciclosPagoGlobal = [];
 let clientePagoSeleccionado = null;
+let editarPagoModalInstance = null;
+let eliminarPagoModalInstance = null;
 
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
@@ -608,6 +610,7 @@ async function verHistorialPagos(dni) {
             <th>Total pack</th>
             <th>Pagado acumulado</th>
             <th>Saldo</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -620,12 +623,97 @@ async function verHistorialPagos(dni) {
               <td>${escapeHtml(formatearMonto(pago.monto_total))}</td>
               <td>${escapeHtml(formatearMonto(pago.monto_pagado))}</td>
               <td>${escapeHtml(formatearMonto(pago.saldo_pendiente))}</td>
+              <td>
+                <div class="d-flex flex-wrap gap-2">
+                  <button type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          data-action="editar-pago"
+                          data-id="${escapeHtml(pago.id)}"
+                          data-dni="${escapeHtml(pago.dni)}"
+                          data-monto="${escapeHtml(pago.monto)}"
+                          data-fecha="${escapeHtml(pago.fecha)}"
+                          data-forma="${escapeHtml(pago.forma_pago)}">
+                    Editar
+                  </button>
+                  <button type="button"
+                          class="btn btn-sm btn-outline-danger"
+                          data-action="eliminar-pago"
+                          data-id="${escapeHtml(pago.id)}"
+                          data-dni="${escapeHtml(pago.dni)}">
+                    Eliminar
+                  </button>
+                </div>
+              </td>
             </tr>
           `).join("")}
         </tbody>
       </table>
     </div>
   `;
+}
+
+function abrirModalEditarPago(id, dni, montoActual, fechaActual, formaActual) {
+  document.getElementById("editarPagoId").value = id;
+  document.getElementById("editarPagoDni").value = dni;
+  document.getElementById("editarPagoMonto").value = montoActual;
+  document.getElementById("editarPagoFecha").value = fechaActual;
+  document.getElementById("editarPagoForma").value = formaActual;
+
+  editarPagoModalInstance?.show();
+}
+
+async function editarPagoDesdeModal(event) {
+  event.preventDefault();
+
+  const id = document.getElementById("editarPagoId").value;
+  const dni = document.getElementById("editarPagoDni").value;
+  const monto = document.getElementById("editarPagoMonto").value.trim();
+  const fecha = document.getElementById("editarPagoFecha").value.trim();
+  const formaPago = document.getElementById("editarPagoForma").value.trim();
+
+  const res = await fetch("/editar-pago", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify({
+      id,
+      monto: monto.trim(),
+      fecha: fecha.trim(),
+      formaPago: formaPago.trim()
+    })
+  });
+
+  const text = await res.text();
+  alert(text);
+  if (!res.ok) return;
+
+  editarPagoModalInstance?.hide();
+  await cargarCiclosPago();
+  await verHistorialPagos(dni);
+}
+
+function abrirModalEliminarPago(id, dni) {
+  document.getElementById("eliminarPagoId").value = id;
+  document.getElementById("eliminarPagoDni").value = dni;
+  eliminarPagoModalInstance?.show();
+}
+
+async function eliminarPagoDesdeModal() {
+  const id = document.getElementById("eliminarPagoId").value;
+  const dni = document.getElementById("eliminarPagoDni").value;
+
+  const res = await fetch("/eliminar-pago", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify({ id })
+  });
+
+  const text = await res.text();
+  alert(text);
+  if (!res.ok) return;
+
+  eliminarPagoModalInstance?.hide();
+  await cargarCiclosPago();
+  await verHistorialPagos(dni);
 }
 
 async function registrarPago(event) {
@@ -1295,6 +1383,14 @@ document.addEventListener("DOMContentLoaded", () => {
   if (pagoFechaInput) {
     pagoFechaInput.value = obtenerFechaHoy();
   }
+  const editarPagoModalElement = document.getElementById("editarPagoModal");
+  const eliminarPagoModalElement = document.getElementById("eliminarPagoModal");
+  if (editarPagoModalElement && window.bootstrap) {
+    editarPagoModalInstance = new bootstrap.Modal(editarPagoModalElement);
+  }
+  if (eliminarPagoModalElement && window.bootstrap) {
+    eliminarPagoModalInstance = new bootstrap.Modal(eliminarPagoModalElement);
+  }
   cargarReservas();
 
   document.getElementById("filtroBusqueda")?.addEventListener("input", pintarClientes);
@@ -1304,6 +1400,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("limpiarFiltrosBtn")?.addEventListener("click", limpiarFiltrosClientes);
   document.getElementById("formListaEspera")?.addEventListener("submit", agregarListaEspera);
   document.getElementById("formPago")?.addEventListener("submit", registrarPago);
+  document.getElementById("editarPagoForm")?.addEventListener("submit", editarPagoDesdeModal);
+  document.getElementById("confirmarEliminarPagoBtn")?.addEventListener("click", eliminarPagoDesdeModal);
   document.getElementById("pagoBusquedaCliente")?.addEventListener("input", renderizarBusquedasPago);
   document.getElementById("dniInput")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -1346,6 +1444,22 @@ document.addEventListener("click", (event) => {
 
   if (action === "ver-historial-pagos") {
     verHistorialPagos(button.dataset.dni);
+    return;
+  }
+
+  if (action === "editar-pago") {
+    abrirModalEditarPago(
+      button.dataset.id,
+      button.dataset.dni,
+      button.dataset.monto,
+      button.dataset.fecha,
+      button.dataset.forma
+    );
+    return;
+  }
+
+  if (action === "eliminar-pago") {
+    abrirModalEliminarPago(button.dataset.id, button.dataset.dni);
     return;
   }
 

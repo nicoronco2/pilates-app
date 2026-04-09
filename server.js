@@ -289,6 +289,43 @@ function obtenerPeriodoLabel(fecha) {
     return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+async function recalcularCicloPago(client, cicloId) {
+    const pagosResult = await client.query(
+        "SELECT monto, fecha FROM pagos WHERE ciclo_id = $1 ORDER BY fecha ASC, id ASC",
+        [cicloId]
+    );
+
+    const cicloResult = await client.query(
+        "SELECT * FROM ciclos_pago WHERE id = $1",
+        [cicloId]
+    );
+
+    if (cicloResult.rowCount === 0) {
+        return;
+    }
+
+    const ciclo = cicloResult.rows[0];
+    const total = Number(ciclo.monto_total);
+    const pagado = pagosResult.rows.reduce((acc, pago) => acc + Number(pago.monto), 0);
+    const saldoPendiente = Math.max(total - pagado, 0);
+    const estado = saldoPendiente <= 0 ? "completo" : "pendiente";
+    const fechaInicio = pagosResult.rows[0]?.fecha || ciclo.fecha_inicio;
+    const fechaUltimoPago = pagosResult.rows[pagosResult.rows.length - 1]?.fecha || ciclo.fecha_ultimo_pago;
+    const periodoLabel = obtenerPeriodoLabel(fechaInicio);
+
+    await client.query(
+        `UPDATE ciclos_pago
+         SET monto_pagado = $1,
+             saldo_pendiente = $2,
+             estado = $3,
+             fecha_inicio = $4,
+             fecha_ultimo_pago = $5,
+             periodo_label = $6
+         WHERE id = $7`,
+        [pagado, saldoPendiente, estado, fechaInicio, fechaUltimoPago, periodoLabel, cicloId]
+    );
+}
+
 /* =====================================================
    LOGIN
 ===================================================== */
@@ -840,6 +877,99 @@ app.post("/registrar-pago", requireAdmin, async (req, res) => {
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("/registrar-pago error:", err);
+    return res.status(500).send("Error interno");
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/editar-pago", requireAdmin, async (req, res) => {
+  let { id, monto, fecha, formaPago } = req.body;
+
+  id = Number(id);
+  fecha = validator.escape(String(fecha || "")).trim();
+  formaPago = validator.escape(String(formaPago || "")).trim();
+
+  if (!id || !fecha || !formaPago) {
+    return res.status(400).send("Datos incompletos");
+  }
+  if (!esMontoValido(monto)) return res.status(400).send("Monto inválido");
+  if (!esFechaValida(fecha)) return res.status(400).send("Fecha inválida");
+
+  monto = parsearMonto(monto);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const pagoActual = await client.query(
+      "SELECT id, ciclo_id FROM pagos WHERE id = $1",
+      [id]
+    );
+
+    if (pagoActual.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).send("Pago no encontrado");
+    }
+
+    const cicloId = pagoActual.rows[0].ciclo_id;
+
+    await client.query(
+      "UPDATE pagos SET monto = $1, fecha = $2, forma_pago = $3 WHERE id = $4",
+      [monto, fecha, formaPago, id]
+    );
+
+    await recalcularCicloPago(client, cicloId);
+
+    await client.query("COMMIT");
+    return res.send("Pago actualizado correctamente");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/editar-pago error:", err);
+    return res.status(500).send("Error interno");
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/eliminar-pago", requireAdmin, async (req, res) => {
+  const id = Number(req.body?.id);
+  if (!id) return res.status(400).send("ID requerido");
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const pagoActual = await client.query(
+      "SELECT id, ciclo_id FROM pagos WHERE id = $1",
+      [id]
+    );
+
+    if (pagoActual.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).send("Pago no encontrado");
+    }
+
+    const cicloId = pagoActual.rows[0].ciclo_id;
+
+    await client.query("DELETE FROM pagos WHERE id = $1", [id]);
+
+    const pagosRestantes = await client.query(
+      "SELECT id FROM pagos WHERE ciclo_id = $1 LIMIT 1",
+      [cicloId]
+    );
+
+    if (pagosRestantes.rowCount === 0) {
+      await client.query("DELETE FROM ciclos_pago WHERE id = $1", [cicloId]);
+    } else {
+      await recalcularCicloPago(client, cicloId);
+    }
+
+    await client.query("COMMIT");
+    return res.send("Pago eliminado correctamente");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/eliminar-pago error:", err);
     return res.status(500).send("Error interno");
   } finally {
     client.release();

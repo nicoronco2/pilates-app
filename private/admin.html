@@ -58,6 +58,23 @@
             margin-top:.4rem;
         }
 
+        .filters-panel{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:16px;
+            padding:14px;
+            background:rgba(248,249,250,0.9);
+        }
+
+        .filters-meta{
+            color:#6c757d;
+            font-size:.95rem;
+        }
+
+        [data-bs-theme="dark"] .filters-panel{
+            background:#141922;
+            border-color:#2a313a;
+        }
+
         @media (max-width:768px){
             h1{ font-size:24px; }
             h4{ font-size:18px; }
@@ -156,6 +173,35 @@
 
         <h4 class="mb-3">Clientes registrados</h4>
         <div id="packsPorVencer" class="mb-3"></div>
+        <div class="filters-panel mb-3">
+            <div class="row g-2">
+                <div class="col-12 col-lg-5">
+                    <input type="text" id="filtroBusqueda" class="form-control" placeholder="Buscar por nombre, DNI o teléfono">
+                </div>
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <select id="filtroPack" class="form-select">
+                        <option value="">Todos los packs</option>
+                        <option value="4">4 clases</option>
+                        <option value="8">8 clases</option>
+                        <option value="12">12 clases</option>
+                        <option value="16">16 clases</option>
+                    </select>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <select id="filtroEstadoPack" class="form-select">
+                        <option value="">Todos los estados</option>
+                        <option value="por-vencer">Packs por vencer</option>
+                        <option value="avisar">Conviene avisar renovación</option>
+                        <option value="agotado">Pack agotado</option>
+                        <option value="en-curso">Pack en curso</option>
+                    </select>
+                </div>
+                <div class="col-12 col-lg-1 d-grid">
+                    <button type="button" id="limpiarFiltrosBtn" class="btn btn-outline-secondary">Limpiar</button>
+                </div>
+            </div>
+            <div id="resumenFiltros" class="filters-meta mt-2"></div>
+        </div>
 
         <div class="table-responsive">
             <table class="table table-striped table-hover">

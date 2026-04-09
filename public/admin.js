@@ -1,6 +1,7 @@
 let clientesGlobal = {};
 let semanaOffset = 0;
 let horaAsistenciaHoy = "";
+let clientesFiltrados = [];
 
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
@@ -66,6 +67,7 @@ function obtenerEstadoPack(restantes) {
 
   if (numeroRestantes <= 0) {
     return {
+      key: "agotado",
       texto: "Pack agotado",
       clase: "bg-dark-subtle text-dark"
     };
@@ -73,6 +75,7 @@ function obtenerEstadoPack(restantes) {
 
   if (numeroRestantes <= UMBRAL_PACK_POR_VENCER) {
     return {
+      key: "por-vencer",
       texto: `Quedan ${numeroRestantes} clase${numeroRestantes === 1 ? "" : "s"}`,
       clase: "bg-danger-subtle text-danger-emphasis"
     };
@@ -80,28 +83,87 @@ function obtenerEstadoPack(restantes) {
 
   if (numeroRestantes <= 4) {
     return {
+      key: "avisar",
       texto: "Conviene avisar renovacion",
       clase: "bg-warning-subtle text-warning-emphasis"
     };
   }
 
   return {
+    key: "en-curso",
     texto: "Pack en curso",
     clase: "bg-success-subtle text-success-emphasis"
   };
 }
 
-function renderizarPacksPorVencer() {
+function obtenerClientesProcesados() {
+  return Object.keys(clientesGlobal)
+    .sort((a, b) => a.localeCompare(b))
+    .map((dni) => {
+      const lista = clientesGlobal[dni];
+      const cli = lista[0];
+      const restantes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
+      const recordatorio = obtenerEstadoPack(restantes);
+
+      return {
+        dni,
+        lista,
+        cli,
+        restantes,
+        recordatorio
+      };
+    });
+}
+
+function obtenerFiltrosClientes() {
+  return {
+    busqueda: document.getElementById("filtroBusqueda")?.value.trim().toLowerCase() || "",
+    pack: document.getElementById("filtroPack")?.value || "",
+    estado: document.getElementById("filtroEstadoPack")?.value || ""
+  };
+}
+
+function filtrarClientes(clientes) {
+  const filtros = obtenerFiltrosClientes();
+
+  return clientes.filter(({ cli, dni, recordatorio }) => {
+    const coincideBusqueda =
+      !filtros.busqueda ||
+      String(cli.nombre).toLowerCase().includes(filtros.busqueda) ||
+      String(dni).toLowerCase().includes(filtros.busqueda) ||
+      String(cli.telefono).toLowerCase().includes(filtros.busqueda);
+
+    const coincidePack = !filtros.pack || String(cli.pack) === filtros.pack;
+    const coincideEstado = !filtros.estado || recordatorio.key === filtros.estado;
+
+    return coincideBusqueda && coincidePack && coincideEstado;
+  });
+}
+
+function renderizarResumenFiltros(total, visibles) {
+  const resumen = document.getElementById("resumenFiltros");
+  if (!resumen) return;
+
+  if (total === 0) {
+    resumen.textContent = "Todavía no hay clientes cargados.";
+    return;
+  }
+
+  if (visibles === total) {
+    resumen.textContent = `Mostrando los ${total} clientes registrados.`;
+    return;
+  }
+
+  resumen.textContent = `Mostrando ${visibles} de ${total} clientes según los filtros aplicados.`;
+}
+
+function renderizarPacksPorVencer(clientes = null) {
   const contenedor = document.getElementById("packsPorVencer");
   if (!contenedor) return;
 
-  const clientesEnRiesgo = Object.keys(clientesGlobal)
-    .map((dni) => {
-      const lista = clientesGlobal[dni];
-      const cliente = lista[0];
-      const restantes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
-      return { cliente, restantes };
-    })
+  const origen = clientes || obtenerClientesProcesados();
+  const clientesEnRiesgo = origen
+    .map(({ cli, restantes }) => ({ cliente: cli, restantes }))
     .filter(({ restantes }) => restantes > 0 && restantes <= UMBRAL_PACK_POR_VENCER)
     .sort((a, b) => a.restantes - b.restantes || String(a.cliente.nombre).localeCompare(String(b.cliente.nombre)));
 
@@ -147,18 +209,25 @@ function pintarClientes() {
   if (!tabla) return;
   tabla.innerHTML = "";
 
-  const keys = Object.keys(clientesGlobal).sort();
-  if (keys.length === 0) {
+  const clientesProcesados = obtenerClientesProcesados();
+  const totalClientes = clientesProcesados.length;
+  clientesFiltrados = filtrarClientes(clientesProcesados);
+
+  if (totalClientes === 0) {
     tabla.innerHTML = "<tr><td colspan='9'>No hay clientes</td></tr>";
-    renderizarPacksPorVencer();
+    renderizarPacksPorVencer([]);
+    renderizarResumenFiltros(0, 0);
     return;
   }
 
-  keys.forEach((dni) => {
-    const lista = clientesGlobal[dni];
-    const cli = lista[0];
-    const restantes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
-    const recordatorio = obtenerEstadoPack(restantes);
+  if (clientesFiltrados.length === 0) {
+    tabla.innerHTML = "<tr><td colspan='9'>No hay clientes que coincidan con esos filtros</td></tr>";
+    renderizarPacksPorVencer(clientesFiltrados);
+    renderizarResumenFiltros(totalClientes, 0);
+    return;
+  }
+
+  clientesFiltrados.forEach(({ dni, lista, cli, restantes, recordatorio }) => {
     tabla.innerHTML += `
       <tr>
         <td>${escapeHtml(cli.nombre)}</td>
@@ -200,7 +269,8 @@ function pintarClientes() {
       </tr>`;
   });
 
-  renderizarPacksPorVencer();
+  renderizarPacksPorVencer(clientesFiltrados);
+  renderizarResumenFiltros(totalClientes, clientesFiltrados.length);
 }
 
 function obtenerLunes() {
@@ -276,6 +346,18 @@ function cambiarSemana(valor) {
 function irSemanaActual() {
   semanaOffset = 0;
   cargarCalendario();
+}
+
+function limpiarFiltrosClientes() {
+  const filtroBusqueda = document.getElementById("filtroBusqueda");
+  const filtroPack = document.getElementById("filtroPack");
+  const filtroEstado = document.getElementById("filtroEstadoPack");
+
+  if (filtroBusqueda) filtroBusqueda.value = "";
+  if (filtroPack) filtroPack.value = "";
+  if (filtroEstado) filtroEstado.value = "";
+
+  pintarClientes();
 }
 
 function mostrarClases(dni) {
@@ -484,6 +566,17 @@ async function editarCliente(dniActual, nombreActual, telefonoActual) {
 document.addEventListener("DOMContentLoaded", () => {
   inicializarTema();
   cargarReservas();
+
+  document.getElementById("filtroBusqueda")?.addEventListener("input", pintarClientes);
+  document.getElementById("filtroPack")?.addEventListener("change", pintarClientes);
+  document.getElementById("filtroEstadoPack")?.addEventListener("change", pintarClientes);
+  document.getElementById("limpiarFiltrosBtn")?.addEventListener("click", limpiarFiltrosClientes);
+  document.getElementById("dniInput")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      buscarCliente();
+    }
+  });
 });
 
 document.getElementById("btnSemanaAnt").addEventListener("click", () => cambiarSemana(-1));

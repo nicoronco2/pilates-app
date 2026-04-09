@@ -133,9 +133,51 @@
             font-size:.92rem;
         }
 
+        .admin-metrics{
+            display:grid;
+            gap:14px;
+            grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+        }
+
+        .admin-metric-card{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:18px;
+            padding:16px;
+            background:rgba(248,249,250,0.94);
+            box-shadow:0 8px 18px rgba(0,0,0,0.04);
+        }
+
+        .admin-metric-label{
+            color:#6c757d;
+            font-size:.84rem;
+            text-transform:uppercase;
+            letter-spacing:.06em;
+            margin-bottom:6px;
+        }
+
+        .admin-metric-value{
+            font-size:1.8rem;
+            font-weight:700;
+            line-height:1;
+            margin-bottom:6px;
+        }
+
+        .admin-metric-help{
+            color:#6c757d;
+            font-size:.92rem;
+            line-height:1.4;
+            min-height:2.6em;
+        }
+
         [data-bs-theme="dark"] .filters-panel{
             background:#141922;
             border-color:#2a313a;
+        }
+
+        [data-bs-theme="dark"] .admin-metric-card{
+            background:#141922;
+            border-color:#2a313a;
+            box-shadow:none;
         }
 
         [data-bs-theme="dark"] .client-history-card,
@@ -151,7 +193,9 @@
         }
 
         [data-bs-theme="dark"] .history-metric-label,
-        [data-bs-theme="dark"] .history-item-meta{
+        [data-bs-theme="dark"] .history-item-meta,
+        [data-bs-theme="dark"] .admin-metric-label,
+        [data-bs-theme="dark"] .admin-metric-help{
             color:#adb5bd;
         }
 
@@ -188,6 +232,8 @@
     </div>
 
 </div>
+
+<div id="adminMetricas" class="admin-metrics mb-4"></div>
 
 <!-- ================= BUSCAR CLIENTE ================= -->
 

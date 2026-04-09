@@ -188,6 +188,73 @@ function renderizarPacksPorVencer(clientes = null) {
   `;
 }
 
+function renderizarMetricasAdmin() {
+  const contenedor = document.getElementById("adminMetricas");
+  if (!contenedor) return;
+
+  const hoy = obtenerFechaHoy();
+  const clientes = obtenerClientesProcesados();
+  const clientesActivos = clientes.filter(({ restantes }) => restantes > 0).length;
+  const clasesHoy = Object.values(clientesGlobal)
+    .flat()
+    .filter((reserva) => reserva.dia === hoy);
+  const pendientesHoy = clasesHoy.filter((reserva) => reserva.asistida == 0).length;
+  const packsPorVencer = clientes.filter(({ restantes }) => restantes > 0 && restantes <= UMBRAL_PACK_POR_VENCER).length;
+
+  const ocupacionPorHorario = {};
+  Object.values(clientesGlobal).flat().forEach((reserva) => {
+    const clave = `${reserva.dia}|${reserva.hora}`;
+    ocupacionPorHorario[clave] = (ocupacionPorHorario[clave] || 0) + 1;
+  });
+
+  const horarioMasCargado = Object.entries(ocupacionPorHorario)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+
+  const metricaHorario = horarioMasCargado
+    ? (() => {
+        const [dia, hora] = horarioMasCargado[0].split("|");
+        return {
+          valor: `${horarioMasCargado[1]}/4`,
+          ayuda: `${formatearFecha(dia)} a las ${hora}`
+        };
+      })()
+    : {
+        valor: "0",
+        ayuda: "Todavia no hay reservas cargadas."
+      };
+
+  const metricas = [
+    {
+      label: "Clientes activos",
+      value: clientesActivos,
+      help: "Clientes con al menos una clase pendiente."
+    },
+    {
+      label: "Clases de hoy",
+      value: clasesHoy.length,
+      help: pendientesHoy > 0 ? `${pendientesHoy} pendiente${pendientesHoy === 1 ? "" : "s"} de asistencia.` : "Todas las clases de hoy ya fueron marcadas."
+    },
+    {
+      label: "Packs por vencer",
+      value: packsPorVencer,
+      help: packsPorVencer > 0 ? "Clientes con 1 o 2 clases restantes." : "No hay renovaciones urgentes."
+    },
+    {
+      label: "Horario mas cargado",
+      value: metricaHorario.value,
+      help: metricaHorario.ayuda
+    }
+  ];
+
+  contenedor.innerHTML = metricas.map((metrica) => `
+    <div class="admin-metric-card">
+      <div class="admin-metric-label">${escapeHtml(metrica.label)}</div>
+      <div class="admin-metric-value">${escapeHtml(metrica.value)}</div>
+      <div class="admin-metric-help">${escapeHtml(metrica.help)}</div>
+    </div>
+  `).join("");
+}
+
 async function cargarReservas() {
   const r = await fetch("/reservas", { ...opcionesFetch, cache: "no-store" });
   if (r.status === 401 || r.status === 403) return window.location = "/login";
@@ -200,6 +267,7 @@ async function cargarReservas() {
     clientesGlobal[key].push(reserva);
   });
 
+  renderizarMetricasAdmin();
   pintarClientes();
   await cargarCalendario();
 }

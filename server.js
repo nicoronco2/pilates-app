@@ -126,6 +126,49 @@ CREATE TABLE IF NOT EXISTS lista_espera (
     console.error("Error creando tabla lista_espera:", err.message);
 });
 
+pool.query(`
+CREATE TABLE IF NOT EXISTS ciclos_pago (
+    id SERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    telefono TEXT NOT NULL,
+    dni TEXT NOT NULL,
+    monto_total NUMERIC(12,2) NOT NULL,
+    monto_pagado NUMERIC(12,2) DEFAULT 0,
+    saldo_pendiente NUMERIC(12,2) DEFAULT 0,
+    estado TEXT NOT NULL DEFAULT 'pendiente',
+    fecha_inicio TEXT NOT NULL,
+    fecha_ultimo_pago TEXT NOT NULL,
+    periodo_label TEXT,
+    pack_referencia INTEGER
+)
+`).catch(err => {
+    console.error("Error creando tabla ciclos_pago:", err.message);
+});
+
+pool.query("ALTER TABLE ciclos_pago ADD COLUMN IF NOT EXISTS periodo_label TEXT").catch(err => {
+    console.error("Error agregando periodo_label a ciclos_pago:", err.message);
+});
+
+pool.query("ALTER TABLE ciclos_pago ADD COLUMN IF NOT EXISTS pack_referencia INTEGER").catch(err => {
+    console.error("Error agregando pack_referencia a ciclos_pago:", err.message);
+});
+
+pool.query(`
+CREATE TABLE IF NOT EXISTS pagos (
+    id SERIAL PRIMARY KEY,
+    ciclo_id INTEGER NOT NULL REFERENCES ciclos_pago(id) ON DELETE CASCADE,
+    nombre TEXT NOT NULL,
+    telefono TEXT NOT NULL,
+    dni TEXT NOT NULL,
+    monto NUMERIC(12,2) NOT NULL,
+    fecha TEXT NOT NULL,
+    forma_pago TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+`).catch(err => {
+    console.error("Error creando tabla pagos:", err.message);
+});
+
 /* =====================================================
    USUARIOS ADMIN (HASH)
 ===================================================== */
@@ -147,6 +190,15 @@ function esTextoNumerico(valor) {
 
 function esHoraValida(hora) {
     return HORARIOS_VALIDOS.includes(hora);
+}
+
+function esMontoValido(valor) {
+    const numero = Number(String(valor ?? "").replace(",", "."));
+    return Number.isFinite(numero) && numero > 0;
+}
+
+function parsearMonto(valor) {
+    return Number(String(valor ?? "").replace(",", "."));
 }
 
 function obtenerPartesFecha(fecha) {
@@ -221,6 +273,20 @@ function obtenerFechaHoyArgentina() {
     const day = parts.find(part => part.type === "day")?.value;
 
     return `${year}-${month}-${day}`;
+}
+
+function obtenerPeriodoLabel(fecha) {
+    const partes = obtenerPartesFecha(fecha);
+    if (!partes) return "";
+
+    const formatter = new Intl.DateTimeFormat("es-AR", {
+        month: "long",
+        year: "numeric",
+        timeZone: "America/Argentina/Buenos_Aires"
+    });
+
+    const texto = formatter.format(partes.date);
+    return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 /* =====================================================
@@ -651,6 +717,132 @@ app.post("/eliminar-lista-espera", requireAdmin, async (req, res) => {
   } catch (err) {
     console.error("/eliminar-lista-espera error:", err);
     return res.status(500).send("Error interno");
+  }
+});
+
+app.get("/ciclos-pago", requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM ciclos_pago ORDER BY fecha_ultimo_pago DESC, id DESC"
+    );
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("/ciclos-pago error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
+app.get("/pagos-historial", requireAdmin, async (req, res) => {
+  const dni = String(req.query.dni || "").trim();
+  if (!dni) return res.status(400).send("DNI requerido");
+
+  try {
+    const result = await pool.query(
+      `SELECT p.*, c.monto_total, c.monto_pagado, c.saldo_pendiente, c.estado, c.periodo_label, c.pack_referencia
+       FROM pagos p
+       INNER JOIN ciclos_pago c ON c.id = p.ciclo_id
+       WHERE p.dni = $1
+       ORDER BY p.fecha DESC, p.id DESC`,
+      [dni]
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("/pagos-historial error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
+app.post("/registrar-pago", requireAdmin, async (req, res) => {
+  let { nombre, telefono, dni, monto, montoTotal, fecha, formaPago, tipoPago } = req.body;
+
+  nombre = validator.escape(String(nombre || "")).trim();
+  telefono = validator.escape(String(telefono || "")).trim();
+  dni = validator.escape(String(dni || "")).trim();
+  fecha = validator.escape(String(fecha || "")).trim();
+  formaPago = validator.escape(String(formaPago || "")).trim();
+  tipoPago = validator.escape(String(tipoPago || "")).trim().toLowerCase();
+
+  if (!nombre || !telefono || !dni || !fecha || !formaPago || !tipoPago) {
+    return res.status(400).send("Datos incompletos");
+  }
+
+  if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
+  if (!esTextoNumerico(dni)) return res.status(400).send("DNI inválido");
+  if (!esFechaValida(fecha)) return res.status(400).send("Fecha inválida");
+  if (!["completo", "parcial"].includes(tipoPago)) {
+    return res.status(400).send("Tipo de pago inválido");
+  }
+  if (!esMontoValido(monto)) return res.status(400).send("Monto inválido");
+
+  monto = parsearMonto(monto);
+  montoTotal = esMontoValido(montoTotal) ? parsearMonto(montoTotal) : 0;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const reservaReferencia = await client.query(
+      "SELECT pack FROM reservas WHERE dni = $1 ORDER BY dia DESC, hora DESC LIMIT 1",
+      [dni]
+    );
+    const packReferencia = reservaReferencia.rows[0]?.pack ? Number(reservaReferencia.rows[0].pack) : null;
+    const periodoLabel = obtenerPeriodoLabel(fecha);
+
+    const cicloAbierto = await client.query(
+      "SELECT * FROM ciclos_pago WHERE dni = $1 AND estado = 'pendiente' ORDER BY id DESC LIMIT 1",
+      [dni]
+    );
+
+    let ciclo;
+
+    if (cicloAbierto.rowCount > 0) {
+      ciclo = cicloAbierto.rows[0];
+      const total = Number(ciclo.monto_total);
+      const pagadoActual = Number(ciclo.monto_pagado);
+      const nuevoPagado = pagadoActual + monto;
+      const saldoPendiente = Math.max(total - nuevoPagado, 0);
+      const estado = saldoPendiente <= 0 ? "completo" : "pendiente";
+
+      await client.query(
+        `UPDATE ciclos_pago
+         SET nombre = $1, telefono = $2, monto_pagado = $3, saldo_pendiente = $4, estado = $5, fecha_ultimo_pago = $6, periodo_label = COALESCE(periodo_label, $8), pack_referencia = COALESCE(pack_referencia, $9)
+         WHERE id = $7`,
+        [nombre, telefono, nuevoPagado, saldoPendiente, estado, fecha, ciclo.id, periodoLabel, packReferencia]
+      );
+    } else {
+      if (!esMontoValido(montoTotal)) {
+        await client.query("ROLLBACK");
+        return res.status(400).send("Monto total del pack inválido");
+      }
+
+      const saldoPendiente = Math.max(montoTotal - monto, 0);
+      const estado = tipoPago === "completo" || saldoPendiente <= 0 ? "completo" : "pendiente";
+
+      const nuevoCiclo = await client.query(
+        `INSERT INTO ciclos_pago (nombre, telefono, dni, monto_total, monto_pagado, saldo_pendiente, estado, fecha_inicio, fecha_ultimo_pago, periodo_label, pack_referencia)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10)
+         RETURNING *`,
+        [nombre, telefono, dni, montoTotal, monto, saldoPendiente, estado, fecha, periodoLabel, packReferencia]
+      );
+
+      ciclo = nuevoCiclo.rows[0];
+    }
+
+    await client.query(
+      `INSERT INTO pagos (ciclo_id, nombre, telefono, dni, monto, fecha, forma_pago)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [ciclo.id, nombre, telefono, dni, monto, fecha, formaPago]
+    );
+
+    await client.query("COMMIT");
+    return res.send("Pago registrado correctamente");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/registrar-pago error:", err);
+    return res.status(500).send("Error interno");
+  } finally {
+    client.release();
   }
 });
 

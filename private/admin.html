@@ -182,6 +182,40 @@
             line-height:1.35;
         }
 
+        .payment-search-results{
+            display:grid;
+            gap:8px;
+            margin-top:10px;
+        }
+
+        .payment-search-item{
+            width:100%;
+            text-align:left;
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:12px;
+            padding:10px 12px;
+            background:rgba(248,249,250,0.94);
+        }
+
+        .payment-search-item small{
+            display:block;
+            color:#6c757d;
+        }
+
+        .payment-selected{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:16px;
+            padding:14px;
+            background:rgba(248,249,250,0.94);
+        }
+
+        .payment-history-card{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:16px;
+            padding:14px;
+            background:rgba(248,249,250,0.94);
+        }
+
         [data-bs-theme="dark"] .filters-panel{
             background:#141922;
             border-color:#2a313a;
@@ -191,6 +225,13 @@
             background:#141922;
             border-color:#2a313a;
             box-shadow:none;
+        }
+
+        [data-bs-theme="dark"] .payment-search-item,
+        [data-bs-theme="dark"] .payment-selected,
+        [data-bs-theme="dark"] .payment-history-card{
+            background:#141922;
+            border-color:#2a313a;
         }
 
         [data-bs-theme="dark"] .client-history-card,
@@ -211,6 +252,10 @@
         [data-bs-theme="dark"] .admin-metric-help,
         [data-bs-theme="dark"] .waitlist-empty,
         [data-bs-theme="dark"] .renew-note{
+            color:#adb5bd;
+        }
+
+        [data-bs-theme="dark"] .payment-search-item small{
             color:#adb5bd;
         }
 
@@ -249,6 +294,76 @@
 </div>
 
 <div id="adminMetricas" class="admin-metrics mb-4"></div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h4 class="mb-3">Pagos</h4>
+
+        <div class="row g-4">
+            <div class="col-12 col-xl-5">
+                <div class="payment-selected mb-3">
+                    <label class="form-label">Buscar cliente por nombre, teléfono o DNI</label>
+                    <input type="text" id="pagoBusquedaCliente" class="form-control" placeholder="Ej: Javier o 351..." autocomplete="off">
+                    <div id="pagoBusquedaResultados" class="payment-search-results"></div>
+                    <div id="pagoClienteSeleccionado" class="mt-3 waitlist-empty">Todavía no seleccionaste un cliente.</div>
+                </div>
+
+                <form id="formPago" class="row g-2">
+                    <input type="hidden" id="pagoNombre">
+                    <input type="hidden" id="pagoTelefono">
+                    <input type="hidden" id="pagoDni">
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Monto abonado</label>
+                        <input type="number" id="pagoMonto" class="form-control" min="1" step="0.01" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Monto total del pack</label>
+                        <input type="number" id="pagoMontoTotal" class="form-control" min="1" step="0.01" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Fecha de pago</label>
+                        <input type="date" id="pagoFecha" class="form-control" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Forma de pago</label>
+                        <select id="pagoFormaPago" class="form-select" required>
+                            <option value="">Elegir</option>
+                            <option value="efectivo">Efectivo</option>
+                            <option value="transferencia">Transferencia</option>
+                            <option value="mercado pago">Mercado Pago</option>
+                            <option value="otro">Otro</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Tipo de pago</label>
+                        <select id="pagoTipo" class="form-select" required>
+                            <option value="completo">Pagó el pack completo</option>
+                            <option value="parcial">Pagó una parte</option>
+                        </select>
+                    </div>
+                    <div class="col-12 d-grid d-md-flex justify-content-md-end mt-2">
+                        <button type="submit" class="btn btn-primary">Registrar pago</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="col-12 col-xl-7">
+                <div class="payment-history-card">
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-2 mb-3">
+                        <h5 class="m-0">Estado de pagos</h5>
+                        <input type="text" id="filtroPagos" class="form-control" placeholder="Filtrar por nombre, teléfono o DNI">
+                    </div>
+                    <div id="pagosResumenTabla"></div>
+                </div>
+
+                <div id="historialPagosCliente" class="payment-history-card mt-3">
+                    <div class="waitlist-empty">Seleccioná “Ver historial” en un cliente para revisar sus pagos.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="card shadow-sm mb-4">
     <div class="card-body">
@@ -397,6 +512,7 @@
                         <th>Clases</th>
                         <th>Restantes</th>
                         <th>Recordatorio</th>
+                        <th>Pago</th>
                         <th>Clases</th>
                         <th>Acción</th>
                     </tr>

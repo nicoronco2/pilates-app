@@ -3,6 +3,8 @@ let semanaOffset = 0;
 let horaAsistenciaHoy = "";
 let clientesFiltrados = [];
 let listaEsperaGlobal = [];
+let ciclosPagoGlobal = [];
+let clientePagoSeleccionado = null;
 
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
@@ -69,6 +71,23 @@ function formatearFecha(fechaTexto) {
   const [year, month, day] = String(fechaTexto).split("-");
   if (!year || !month || !day) return fechaTexto;
   return `${day}/${month}/${year}`;
+}
+
+function formatearMonto(valor) {
+  const numero = Number(valor) || 0;
+  return numero.toLocaleString("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0
+  });
+}
+
+function formatearReferenciaCiclo(ciclo) {
+  if (!ciclo) return "";
+  const partes = [];
+  if (ciclo.periodo_label) partes.push(String(ciclo.periodo_label));
+  if (ciclo.pack_referencia) partes.push(`Pack ${ciclo.pack_referencia} clases`);
+  return partes.join(" · ");
 }
 
 function sumarDias(fechaTexto, dias) {
@@ -351,6 +370,305 @@ function renderizarMetricasAdmin() {
   `).join("");
 }
 
+function obtenerCicloPagoActual(dni) {
+  const ciclos = ciclosPagoGlobal
+    .filter((ciclo) => String(ciclo.dni) === String(dni))
+    .sort((a, b) => {
+      if (a.estado === "pendiente" && b.estado !== "pendiente") return -1;
+      if (a.estado !== "pendiente" && b.estado === "pendiente") return 1;
+      return String(b.fecha_ultimo_pago).localeCompare(String(a.fecha_ultimo_pago)) || Number(b.id) - Number(a.id);
+    });
+
+  return ciclos[0] || null;
+}
+
+function obtenerEstadoPagoCliente(dni) {
+  const ciclo = obtenerCicloPagoActual(dni);
+  if (!ciclo) {
+    return {
+      texto: "Sin pagos registrados",
+      clase: "bg-secondary-subtle text-secondary-emphasis",
+      detalle: ""
+    };
+  }
+
+  const saldo = Number(ciclo.saldo_pendiente || 0);
+  if (saldo > 0) {
+    return {
+      texto: "Pago incompleto",
+      clase: "bg-danger-subtle text-danger-emphasis",
+      detalle: `Debe ${formatearMonto(saldo)}`,
+      referencia: formatearReferenciaCiclo(ciclo)
+    };
+  }
+
+  return {
+    texto: "Pago completo",
+    clase: "bg-success-subtle text-success-emphasis",
+    detalle: `Ultimo pago ${formatearFecha(ciclo.fecha_ultimo_pago)}`,
+    referencia: formatearReferenciaCiclo(ciclo)
+  };
+}
+
+function renderizarBusquedasPago() {
+  const contenedor = document.getElementById("pagoBusquedaResultados");
+  const input = document.getElementById("pagoBusquedaCliente");
+  if (!contenedor || !input) return;
+
+  const query = input.value.trim().toLowerCase();
+  if (!query) {
+    contenedor.innerHTML = "";
+    return;
+  }
+
+  const coincidencias = obtenerClientesProcesados()
+    .filter(({ cli, dni }) =>
+      String(cli.nombre).toLowerCase().includes(query) ||
+      String(cli.telefono).toLowerCase().includes(query) ||
+      String(dni).toLowerCase().includes(query)
+    )
+    .slice(0, 6);
+
+  if (!coincidencias.length) {
+    contenedor.innerHTML = `<div class="waitlist-empty">No se encontraron clientes con esa búsqueda.</div>`;
+    return;
+  }
+
+  contenedor.innerHTML = coincidencias.map(({ cli, dni }) => `
+    <button type="button"
+            class="payment-search-item"
+            data-action="seleccionar-cliente-pago"
+            data-dni="${escapeHtml(dni)}">
+      <strong>${escapeHtml(cli.nombre)}</strong>
+      <small>DNI ${escapeHtml(dni)} · Tel. ${escapeHtml(cli.telefono)}</small>
+    </button>
+  `).join("");
+}
+
+function actualizarClientePagoSeleccionado() {
+  const contenedor = document.getElementById("pagoClienteSeleccionado");
+  if (!contenedor) return;
+
+  if (!clientePagoSeleccionado) {
+    contenedor.className = "mt-3 waitlist-empty";
+    contenedor.textContent = "Todavía no seleccionaste un cliente.";
+    return;
+  }
+
+  const ciclo = obtenerCicloPagoActual(clientePagoSeleccionado.dni);
+  const estado = obtenerEstadoPagoCliente(clientePagoSeleccionado.dni);
+
+  contenedor.className = "mt-3";
+  contenedor.innerHTML = `
+    <strong>${escapeHtml(clientePagoSeleccionado.nombre)}</strong><br>
+    DNI ${escapeHtml(clientePagoSeleccionado.dni)} · Tel. ${escapeHtml(clientePagoSeleccionado.telefono)}<br>
+    <span class="badge rounded-pill ${estado.clase} mt-2">${estado.texto}</span>
+    ${estado.detalle ? `<span class="renew-note">${escapeHtml(estado.detalle)}</span>` : ""}
+    ${estado.referencia ? `<span class="renew-note">${escapeHtml(estado.referencia)}</span>` : ""}
+    ${ciclo ? `<span class="renew-note">Total del pack: ${escapeHtml(formatearMonto(ciclo.monto_total))}</span>` : ""}
+  `;
+}
+
+function seleccionarClientePago(dni) {
+  const lista = clientesGlobal[String(dni)] || [];
+  if (!lista.length) return;
+
+  const cliente = lista[0];
+  clientePagoSeleccionado = {
+    nombre: cliente.nombre,
+    telefono: cliente.telefono,
+    dni: cliente.dni
+  };
+
+  document.getElementById("pagoNombre").value = cliente.nombre;
+  document.getElementById("pagoTelefono").value = cliente.telefono;
+  document.getElementById("pagoDni").value = cliente.dni;
+  document.getElementById("pagoBusquedaCliente").value = cliente.nombre;
+  document.getElementById("pagoBusquedaResultados").innerHTML = "";
+
+  const ciclo = obtenerCicloPagoActual(cliente.dni);
+  if (ciclo) {
+    document.getElementById("pagoMontoTotal").value = Number(ciclo.monto_total);
+    document.getElementById("pagoTipo").value = Number(ciclo.saldo_pendiente) > 0 ? "parcial" : "completo";
+  } else {
+    document.getElementById("pagoMontoTotal").value = "";
+    document.getElementById("pagoTipo").value = "completo";
+  }
+
+  document.getElementById("pagoFecha").value = obtenerFechaHoy();
+  actualizarClientePagoSeleccionado();
+}
+
+function renderizarResumenPagos() {
+  const contenedor = document.getElementById("pagosResumenTabla");
+  if (!contenedor) return;
+
+  const query = document.getElementById("filtroPagos")?.value.trim().toLowerCase() || "";
+  const clientes = obtenerClientesProcesados()
+    .map(({ cli, dni }) => ({
+      nombre: cli.nombre,
+      telefono: cli.telefono,
+      dni,
+      ciclo: obtenerCicloPagoActual(dni)
+    }))
+    .filter((cliente) =>
+      !query ||
+      String(cliente.nombre).toLowerCase().includes(query) ||
+      String(cliente.telefono).toLowerCase().includes(query) ||
+      String(cliente.dni).toLowerCase().includes(query)
+    );
+
+  if (!clientes.length) {
+    contenedor.innerHTML = `<div class="waitlist-empty">No hay clientes que coincidan con esa búsqueda.</div>`;
+    return;
+  }
+
+  contenedor.innerHTML = `
+    <div class="table-responsive">
+      <table class="table table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>Nombre</th>
+            <th>DNI</th>
+            <th>Teléfono</th>
+            <th>Total pack</th>
+            <th>Pagado</th>
+            <th>Saldo</th>
+            <th>Estado</th>
+            <th>Período</th>
+            <th>Historial</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${clientes.map((cliente) => {
+            const estado = obtenerEstadoPagoCliente(cliente.dni);
+            const ciclo = cliente.ciclo;
+            return `
+              <tr>
+                <td>${escapeHtml(cliente.nombre)}</td>
+                <td>${escapeHtml(cliente.dni)}</td>
+                <td>${escapeHtml(cliente.telefono)}</td>
+                <td>${ciclo ? escapeHtml(formatearMonto(ciclo.monto_total)) : "-"}</td>
+                <td>${ciclo ? escapeHtml(formatearMonto(ciclo.monto_pagado)) : "-"}</td>
+                <td>${ciclo ? escapeHtml(formatearMonto(ciclo.saldo_pendiente)) : "-"}</td>
+                <td>
+                  <span class="badge rounded-pill ${estado.clase}">${estado.texto}</span>
+                  ${estado.detalle ? `<span class="renew-note">${escapeHtml(estado.detalle)}</span>` : ""}
+                </td>
+                <td>${ciclo ? escapeHtml(formatearReferenciaCiclo(ciclo) || "-") : "-"}</td>
+                <td>
+                  <button type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          data-action="ver-historial-pagos"
+                          data-dni="${escapeHtml(cliente.dni)}">
+                    Ver historial
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function cargarCiclosPago() {
+  const res = await fetch("/ciclos-pago", { ...opcionesFetch, cache: "no-store" });
+  if (res.status === 401 || res.status === 403) return window.location.href = "/login";
+  ciclosPagoGlobal = await res.json();
+  renderizarResumenPagos();
+  actualizarClientePagoSeleccionado();
+}
+
+async function verHistorialPagos(dni) {
+  const contenedor = document.getElementById("historialPagosCliente");
+  if (!contenedor) return;
+
+  const res = await fetch(`/pagos-historial?dni=${encodeURIComponent(dni)}`, { ...opcionesFetch, cache: "no-store" });
+  if (res.status === 401 || res.status === 403) return window.location.href = "/login";
+  const historial = await res.json();
+
+  if (!historial.length) {
+    contenedor.innerHTML = `<div class="waitlist-empty">Ese cliente todavía no tiene pagos registrados.</div>`;
+    return;
+  }
+
+  const cliente = historial[0];
+  contenedor.innerHTML = `
+    <h5 class="mb-3">Historial de pagos de ${escapeHtml(cliente.nombre)}</h5>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped">
+        <thead class="table-dark">
+          <tr>
+            <th>Período</th>
+            <th>Fecha</th>
+            <th>Monto</th>
+            <th>Forma de pago</th>
+            <th>Total pack</th>
+            <th>Pagado acumulado</th>
+            <th>Saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${historial.map((pago) => `
+            <tr>
+              <td>${escapeHtml(formatearReferenciaCiclo(pago) || "-")}</td>
+              <td>${formatearFecha(pago.fecha)}</td>
+              <td>${escapeHtml(formatearMonto(pago.monto))}</td>
+              <td>${escapeHtml(pago.forma_pago)}</td>
+              <td>${escapeHtml(formatearMonto(pago.monto_total))}</td>
+              <td>${escapeHtml(formatearMonto(pago.monto_pagado))}</td>
+              <td>${escapeHtml(formatearMonto(pago.saldo_pendiente))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function registrarPago(event) {
+  event.preventDefault();
+
+  if (!clientePagoSeleccionado) {
+    alert("Primero seleccioná un cliente");
+    return;
+  }
+
+  const payload = {
+    nombre: document.getElementById("pagoNombre").value.trim(),
+    telefono: document.getElementById("pagoTelefono").value.trim(),
+    dni: document.getElementById("pagoDni").value.trim(),
+    monto: document.getElementById("pagoMonto").value,
+    montoTotal: document.getElementById("pagoMontoTotal").value,
+    fecha: document.getElementById("pagoFecha").value,
+    formaPago: document.getElementById("pagoFormaPago").value,
+    tipoPago: document.getElementById("pagoTipo").value
+  };
+
+  const res = await fetch("/registrar-pago", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify(payload)
+  });
+
+  const text = await res.text();
+  alert(text);
+  if (!res.ok) return;
+
+  document.getElementById("formPago").reset();
+  document.getElementById("pagoFecha").value = obtenerFechaHoy();
+  if (clientePagoSeleccionado) {
+    document.getElementById("pagoNombre").value = clientePagoSeleccionado.nombre;
+    document.getElementById("pagoTelefono").value = clientePagoSeleccionado.telefono;
+    document.getElementById("pagoDni").value = clientePagoSeleccionado.dni;
+  }
+
+  await cargarCiclosPago();
+  await verHistorialPagos(payload.dni);
+}
+
 async function cargarListaEspera() {
   const res = await fetch("/lista-espera", { ...opcionesFetch, cache: "no-store" });
   if (res.status === 401 || res.status === 403) return window.location.href = "/login";
@@ -417,6 +735,7 @@ async function cargarReservas() {
     clientesGlobal[key].push(reserva);
   });
 
+  await cargarCiclosPago();
   renderizarMetricasAdmin();
   pintarClientes();
   await cargarCalendario();
@@ -433,20 +752,21 @@ function pintarClientes() {
   clientesFiltrados = filtrarClientes(clientesProcesados);
 
   if (totalClientes === 0) {
-    tabla.innerHTML = "<tr><td colspan='9'>No hay clientes</td></tr>";
+    tabla.innerHTML = "<tr><td colspan='10'>No hay clientes</td></tr>";
     renderizarPacksPorVencer([]);
     renderizarResumenFiltros(0, 0);
     return;
   }
 
   if (clientesFiltrados.length === 0) {
-    tabla.innerHTML = "<tr><td colspan='9'>No hay clientes que coincidan con esos filtros</td></tr>";
+    tabla.innerHTML = "<tr><td colspan='10'>No hay clientes que coincidan con esos filtros</td></tr>";
     renderizarPacksPorVencer(clientesFiltrados);
     renderizarResumenFiltros(totalClientes, 0);
     return;
   }
 
   clientesFiltrados.forEach(({ dni, lista, cli, restantes, recordatorio, renovacion }) => {
+    const pago = obtenerEstadoPagoCliente(dni);
     tabla.innerHTML += `
       <tr>
         <td>${escapeHtml(cli.nombre)}</td>
@@ -458,6 +778,10 @@ function pintarClientes() {
         <td>
           <span class="badge rounded-pill ${recordatorio.clase}">${recordatorio.texto}</span>
           ${renovacion ? `<span class="renew-note">${escapeHtml(renovacion.texto)}</span>` : ""}
+        </td>
+        <td>
+          <span class="badge rounded-pill ${pago.clase}">${pago.texto}</span>
+          ${pago.detalle ? `<span class="renew-note">${escapeHtml(pago.detalle)}</span>` : ""}
         </td>
         <td>
           <button type="button"
@@ -726,6 +1050,7 @@ async function buscarCliente() {
   const restantes = lista.filter((item) => item.asistida == 0).length;
   const asistidas = lista.filter((item) => item.asistida == 1).length;
   const estadoPack = obtenerEstadoPack(restantes);
+  const estadoPago = obtenerEstadoPagoCliente(cliente.dni);
   const hoyPendiente = lista
     .filter((item) => item.dia === obtenerFechaHoy() && item.asistida == 0)
     .sort((a, b) => a.hora.localeCompare(b.hora))[0];
@@ -733,7 +1058,7 @@ async function buscarCliente() {
   horaAsistenciaHoy = hoyPendiente ? hoyPendiente.hora : "";
 
   document.getElementById("infoCliente").innerHTML =
-    `<strong>Nombre:</strong> ${escapeHtml(cliente.nombre)} | <strong>Restantes:</strong> ${restantes} | <strong>Asistidas:</strong> ${asistidas} | <strong>Estado:</strong> ${escapeHtml(estadoPack.texto)}` +
+    `<strong>Nombre:</strong> ${escapeHtml(cliente.nombre)} | <strong>Restantes:</strong> ${restantes} | <strong>Asistidas:</strong> ${asistidas} | <strong>Estado:</strong> ${escapeHtml(estadoPack.texto)} | <strong>Pago:</strong> ${escapeHtml(estadoPago.texto)}` +
     (horaAsistenciaHoy ? ` | <strong>Clase hoy:</strong> ${escapeHtml(horaAsistenciaHoy)}` : "");
 
   document.getElementById("btnAsistencia").style.display = horaAsistenciaHoy ? "block" : "none";
@@ -743,7 +1068,7 @@ async function buscarCliente() {
       <table class="table table-bordered">
         <thead class="table-dark">
           <tr>
-            <th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th><th>Asistidas</th><th>Estado</th><th>Acciones</th>
+            <th>Nombre</th><th>DNI</th><th>Teléfono</th><th>Pack</th><th>Restantes</th><th>Asistidas</th><th>Estado</th><th>Pago</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -757,6 +1082,10 @@ async function buscarCliente() {
             <td>
               <span class="badge rounded-pill ${estadoPack.clase}">${estadoPack.texto}</span>
               ${obtenerEstadoRenovacion(lista) ? `<span class="renew-note">${escapeHtml(obtenerEstadoRenovacion(lista).texto)}</span>` : ""}
+            </td>
+            <td>
+              <span class="badge rounded-pill ${estadoPago.clase}">${estadoPago.texto}</span>
+              ${estadoPago.detalle ? `<span class="renew-note">${escapeHtml(estadoPago.detalle)}</span>` : ""}
             </td>
             <td>
               <div class="d-flex flex-wrap gap-2">
@@ -962,13 +1291,20 @@ async function editarCliente(dniActual, nombreActual, telefonoActual) {
 
 document.addEventListener("DOMContentLoaded", () => {
   inicializarTema();
+  const pagoFechaInput = document.getElementById("pagoFecha");
+  if (pagoFechaInput) {
+    pagoFechaInput.value = obtenerFechaHoy();
+  }
   cargarReservas();
 
   document.getElementById("filtroBusqueda")?.addEventListener("input", pintarClientes);
   document.getElementById("filtroPack")?.addEventListener("change", pintarClientes);
   document.getElementById("filtroEstadoPack")?.addEventListener("change", pintarClientes);
+  document.getElementById("filtroPagos")?.addEventListener("input", renderizarResumenPagos);
   document.getElementById("limpiarFiltrosBtn")?.addEventListener("click", limpiarFiltrosClientes);
   document.getElementById("formListaEspera")?.addEventListener("submit", agregarListaEspera);
+  document.getElementById("formPago")?.addEventListener("submit", registrarPago);
+  document.getElementById("pagoBusquedaCliente")?.addEventListener("input", renderizarBusquedasPago);
   document.getElementById("dniInput")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -1000,6 +1336,16 @@ document.addEventListener("click", (event) => {
 
   if (action === "editar-cliente") {
     editarCliente(button.dataset.dni, button.dataset.nombre, button.dataset.telefono);
+    return;
+  }
+
+  if (action === "seleccionar-cliente-pago") {
+    seleccionarClientePago(button.dataset.dni);
+    return;
+  }
+
+  if (action === "ver-historial-pagos") {
+    verHistorialPagos(button.dataset.dni);
     return;
   }
 

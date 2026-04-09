@@ -112,6 +112,20 @@ CREATE TABLE IF NOT EXISTS reservas (
     console.error("Error creando tabla reservas:", err.message);
 });
 
+pool.query(`
+CREATE TABLE IF NOT EXISTS lista_espera (
+    id SERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    telefono TEXT NOT NULL,
+    dni TEXT NOT NULL,
+    dia TEXT NOT NULL,
+    hora TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+`).catch(err => {
+    console.error("Error creando tabla lista_espera:", err.message);
+});
+
 /* =====================================================
    USUARIOS ADMIN (HASH)
 ===================================================== */
@@ -569,6 +583,74 @@ app.post("/editar-cliente", requireAdmin, async (req, res) => {
     return res.status(500).send("Error interno");
   } finally {
     client.release();
+  }
+});
+
+app.get("/lista-espera", requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM lista_espera ORDER BY dia ASC, hora ASC, created_at ASC");
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("/lista-espera error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
+app.post("/lista-espera", requireAdmin, async (req, res) => {
+  let { nombre, telefono, dni, dia, hora } = req.body;
+
+  nombre = validator.escape(String(nombre || "")).trim();
+  telefono = validator.escape(String(telefono || "")).trim();
+  dni = validator.escape(String(dni || "")).trim();
+  dia = validator.escape(String(dia || "")).trim();
+  hora = validator.escape(String(hora || "")).trim();
+
+  if (!nombre || !telefono || !dni || !dia || !hora) {
+    return res.status(400).send("Datos incompletos");
+  }
+
+  if (!esTextoNumerico(dni)) return res.status(400).send("DNI inválido");
+  if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
+
+  const errorClase = validarClase({ dia, hora });
+  if (errorClase) return res.status(400).send(errorClase);
+
+  try {
+    const existente = await pool.query(
+      "SELECT id FROM lista_espera WHERE dni = $1 AND dia = $2 AND hora = $3 LIMIT 1",
+      [dni, dia, hora]
+    );
+
+    if (existente.rowCount > 0) {
+      return res.status(400).send("Ese cliente ya está en lista de espera para ese horario");
+    }
+
+    await pool.query(
+      "INSERT INTO lista_espera (nombre, telefono, dni, dia, hora) VALUES ($1, $2, $3, $4, $5)",
+      [nombre, telefono, dni, dia, hora]
+    );
+
+    return res.send("Cliente agregado a lista de espera");
+  } catch (err) {
+    console.error("/lista-espera POST error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
+app.post("/eliminar-lista-espera", requireAdmin, async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).send("ID requerido");
+
+  try {
+    const result = await pool.query("DELETE FROM lista_espera WHERE id = $1", [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).send("Registro no encontrado");
+    }
+
+    return res.send("Registro eliminado");
+  } catch (err) {
+    console.error("/eliminar-lista-espera error:", err);
+    return res.status(500).send("Error interno");
   }
 });
 

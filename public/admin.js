@@ -2,6 +2,7 @@ let clientesGlobal = {};
 let semanaOffset = 0;
 let horaAsistenciaHoy = "";
 let clientesFiltrados = [];
+let listaEsperaGlobal = [];
 
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
@@ -255,6 +256,60 @@ function renderizarMetricasAdmin() {
   `).join("");
 }
 
+async function cargarListaEspera() {
+  const res = await fetch("/lista-espera", { ...opcionesFetch, cache: "no-store" });
+  if (res.status === 401 || res.status === 403) return window.location.href = "/login";
+  listaEsperaGlobal = await res.json();
+  renderizarListaEspera();
+}
+
+function renderizarListaEspera() {
+  const contenedor = document.getElementById("listaEsperaTabla");
+  if (!contenedor) return;
+
+  if (!listaEsperaGlobal.length) {
+    contenedor.innerHTML = `<p class="waitlist-empty mb-0">Todavia no hay clientes en lista de espera.</p>`;
+    return;
+  }
+
+  contenedor.innerHTML = `
+    <div class="table-responsive">
+      <table class="table table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>Nombre</th>
+            <th>DNI</th>
+            <th>Teléfono</th>
+            <th>Día</th>
+            <th>Hora</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${listaEsperaGlobal.map((registro) => `
+            <tr>
+              <td>${escapeHtml(registro.nombre)}</td>
+              <td>${escapeHtml(registro.dni)}</td>
+              <td>${escapeHtml(registro.telefono)}</td>
+              <td>${formatearFecha(registro.dia)}</td>
+              <td>${escapeHtml(registro.hora)}</td>
+              <td>
+                <button type="button"
+                        class="btn btn-sm btn-outline-danger"
+                        data-action="eliminar-espera"
+                        data-id="${escapeHtml(registro.id)}"
+                        data-nombre="${escapeHtml(registro.nombre)}">
+                  Quitar
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 async function cargarReservas() {
   const r = await fetch("/reservas", { ...opcionesFetch, cache: "no-store" });
   if (r.status === 401 || r.status === 403) return window.location = "/login";
@@ -270,6 +325,7 @@ async function cargarReservas() {
   renderizarMetricasAdmin();
   pintarClientes();
   await cargarCalendario();
+  await cargarListaEspera();
 }
 
 function pintarClientes() {
@@ -635,6 +691,50 @@ async function reprogramarClase(id) {
   }
 }
 
+async function agregarListaEspera(event) {
+  event.preventDefault();
+
+  const payload = {
+    nombre: document.getElementById("esperaNombre")?.value.trim(),
+    telefono: document.getElementById("esperaTelefono")?.value.trim(),
+    dni: document.getElementById("esperaDni")?.value.trim(),
+    dia: document.getElementById("esperaDia")?.value,
+    hora: document.getElementById("esperaHora")?.value
+  };
+
+  const res = await fetch("/lista-espera", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify(payload)
+  });
+
+  const text = await res.text();
+  alert(text);
+
+  if (!res.ok) return;
+
+  document.getElementById("formListaEspera")?.reset();
+  await cargarListaEspera();
+}
+
+async function eliminarListaEspera(id, nombre) {
+  if (!confirm(`¿Querés quitar a ${nombre} de la lista de espera?`)) {
+    return;
+  }
+
+  const res = await fetch("/eliminar-lista-espera", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify({ id })
+  });
+
+  const text = await res.text();
+  alert(text);
+
+  if (!res.ok) return;
+  await cargarListaEspera();
+}
+
 async function eliminarCliente(dni, nombre) {
   if (!confirm(`¿Seguro que querés eliminar a ${nombre} y todos sus registros?`)) {
     return;
@@ -713,6 +813,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("filtroPack")?.addEventListener("change", pintarClientes);
   document.getElementById("filtroEstadoPack")?.addEventListener("change", pintarClientes);
   document.getElementById("limpiarFiltrosBtn")?.addEventListener("click", limpiarFiltrosClientes);
+  document.getElementById("formListaEspera")?.addEventListener("submit", agregarListaEspera);
   document.getElementById("dniInput")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -744,6 +845,11 @@ document.addEventListener("click", (event) => {
 
   if (action === "editar-cliente") {
     editarCliente(button.dataset.dni, button.dataset.nombre, button.dataset.telefono);
+    return;
+  }
+
+  if (action === "eliminar-espera") {
+    eliminarListaEspera(button.dataset.id, button.dataset.nombre);
     return;
   }
 

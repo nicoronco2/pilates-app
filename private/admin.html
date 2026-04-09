@@ -169,6 +169,11 @@
             min-height:2.6em;
         }
 
+        .waitlist-empty{
+            color:#6c757d;
+            font-size:.95rem;
+        }
+
         [data-bs-theme="dark"] .filters-panel{
             background:#141922;
             border-color:#2a313a;
@@ -195,7 +200,8 @@
         [data-bs-theme="dark"] .history-metric-label,
         [data-bs-theme="dark"] .history-item-meta,
         [data-bs-theme="dark"] .admin-metric-label,
-        [data-bs-theme="dark"] .admin-metric-help{
+        [data-bs-theme="dark"] .admin-metric-help,
+        [data-bs-theme="dark"] .waitlist-empty{
             color:#adb5bd;
         }
 
@@ -234,6 +240,47 @@
 </div>
 
 <div id="adminMetricas" class="admin-metrics mb-4"></div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+
+        <h4 class="mb-3">Lista de espera</h4>
+
+        <form id="formListaEspera" class="row g-2">
+            <div class="col-12 col-md-4">
+                <input type="text" id="esperaNombre" class="form-control" placeholder="Nombre" required>
+            </div>
+            <div class="col-12 col-md-3">
+                <input type="text" id="esperaTelefono" class="form-control" placeholder="Teléfono" required>
+            </div>
+            <div class="col-12 col-md-2">
+                <input type="text" id="esperaDni" class="form-control" placeholder="DNI" required>
+            </div>
+            <div class="col-6 col-md-2">
+                <input type="date" id="esperaDia" class="form-control" required>
+            </div>
+            <div class="col-6 col-md-1">
+                <select id="esperaHora" class="form-select" required>
+                    <option value="">Hora</option>
+                    <option value="08:00">08:00</option>
+                    <option value="09:00">09:00</option>
+                    <option value="10:00">10:00</option>
+                    <option value="11:00">11:00</option>
+                    <option value="16:00">16:00</option>
+                    <option value="17:00">17:00</option>
+                    <option value="18:00">18:00</option>
+                    <option value="19:00">19:00</option>
+                </select>
+            </div>
+            <div class="col-12 d-grid d-md-flex justify-content-md-end mt-2">
+                <button type="submit" class="btn btn-primary">Agregar a lista de espera</button>
+            </div>
+        </form>
+
+        <div id="listaEsperaTabla" class="mt-4"></div>
+
+    </div>
+</div>
 
 <!-- ================= BUSCAR CLIENTE ================= -->
 

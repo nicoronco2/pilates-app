@@ -8,6 +8,7 @@ let pagosGlobal = [];
 let clientePagoSeleccionado = null;
 let editarPagoModalInstance = null;
 let eliminarPagoModalInstance = null;
+let historialPagoContexto = null;
 
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
@@ -60,6 +61,18 @@ function normalizarTexto(valor) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function obtenerClaveClientePago(cliente) {
+  const nombre = normalizarTexto(cliente?.nombre);
+  const telefono = String(cliente?.telefono ?? "").trim();
+  const dni = String(cliente?.dni ?? "").trim();
+  return telefono ? `${nombre}|${telefono}` : `${nombre}|${dni}`;
+}
+
+function telefonoPareceValido(telefono) {
+  const soloDigitos = String(telefono ?? "").replace(/\D/g, "");
+  return soloDigitos.length >= 6;
 }
 
 function obtenerFechaHoy() {
@@ -651,24 +664,46 @@ function obtenerClientesParaResumenPagos() {
   const clientesMap = new Map();
 
   obtenerClientesProcesados().forEach(({ cli, dni }) => {
-    const key = String(dni).trim();
-    clientesMap.set(key, {
+    const cliente = {
       nombre: cli.nombre,
       telefono: cli.telefono,
-      dni: key
-    });
+      dni: String(dni).trim(),
+      dnisRelacionados: [String(dni).trim()]
+    };
+    clientesMap.set(obtenerClaveClientePago(cliente), cliente);
   });
 
   ciclosPagoGlobal.forEach((ciclo) => {
-    const key = String(ciclo.dni || "").trim();
-    if (!key) return;
+    const dniCiclo = String(ciclo.dni || "").trim();
+    const key = obtenerClaveClientePago(ciclo);
+    let actual = clientesMap.get(key);
 
-    if (clientesMap.has(key)) {
-      const actual = clientesMap.get(key);
-      clientesMap.set(key, {
+    if (!actual) {
+      const nombreCiclo = normalizarTexto(ciclo.nombre);
+      const telefonoCiclo = String(ciclo.telefono || "").trim();
+      const telefonoCicloValido = telefonoPareceValido(telefonoCiclo);
+
+      actual = Array.from(clientesMap.values()).find((clienteExistente) => {
+        const mismoNombre = normalizarTexto(clienteExistente.nombre) === nombreCiclo;
+        if (!mismoNombre) return false;
+
+        const telefonoExistente = String(clienteExistente.telefono || "").trim();
+        const telefonoExistenteValido = telefonoPareceValido(telefonoExistente);
+        return (
+          telefonoExistente === telefonoCiclo ||
+          !telefonoExistenteValido ||
+          !telefonoCicloValido
+        );
+      });
+    }
+
+    if (actual) {
+      const relacionados = new Set([...(actual.dnisRelacionados || []), dniCiclo].filter(Boolean));
+      clientesMap.set(obtenerClaveClientePago(actual), {
         nombre: actual.nombre || ciclo.nombre,
         telefono: actual.telefono || ciclo.telefono,
-        dni: key
+        dni: actual.dni || dniCiclo,
+        dnisRelacionados: Array.from(relacionados)
       });
       return;
     }
@@ -676,7 +711,8 @@ function obtenerClientesParaResumenPagos() {
     clientesMap.set(key, {
       nombre: ciclo.nombre,
       telefono: ciclo.telefono,
-      dni: key
+      dni: dniCiclo,
+      dnisRelacionados: dniCiclo ? [dniCiclo] : []
     });
   });
 
@@ -744,7 +780,9 @@ function renderizarResumenPagos() {
                   <button type="button"
                           class="btn btn-sm btn-outline-primary"
                           data-action="ver-historial-pagos"
-                          data-dni="${escapeHtml(cliente.dni)}">
+                          data-dni="${escapeHtml(cliente.dni)}"
+                          data-dnis="${escapeHtml((cliente.dnisRelacionados || [cliente.dni]).join(","))}"
+                          data-nombre="${escapeHtml(cliente.nombre)}">
                     Ver historial
                   </button>
                 </td>
@@ -773,13 +811,46 @@ async function cargarPagos() {
   renderizarDashboardEconomico();
 }
 
-async function verHistorialPagos(dni) {
+function obtenerHistorialPagosRelacionado({ dni = "", dnis = [], nombre = "" } = {}) {
+  const dnisSet = new Set(
+    [dni, ...dnis]
+      .map((valor) => String(valor || "").trim())
+      .filter(Boolean)
+  );
+  const nombreNormalizado = normalizarTexto(nombre);
+  const ciclosRelacionados = new Set();
+
+  ciclosPagoGlobal.forEach((ciclo) => {
+    const dniCiclo = String(ciclo.dni || "").trim();
+    const mismoDni = dnisSet.has(dniCiclo);
+    const mismoCliente =
+      nombreNormalizado &&
+      normalizarTexto(ciclo.nombre) === nombreNormalizado;
+
+    if (mismoDni || mismoCliente) {
+      ciclosRelacionados.add(Number(ciclo.id));
+      if (dniCiclo) dnisSet.add(dniCiclo);
+    }
+  });
+
+  return pagosGlobal
+    .filter((pago) => {
+      const dniPago = String(pago.dni || "").trim();
+      return dnisSet.has(dniPago) || ciclosRelacionados.has(Number(pago.ciclo_id));
+    })
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || Number(b.id) - Number(a.id));
+}
+
+async function verHistorialPagos(dni, dnisRelacionados = [], nombre = "") {
   const contenedor = document.getElementById("historialPagosCliente");
   if (!contenedor) return;
 
-  const res = await fetch(`/pagos-historial?dni=${encodeURIComponent(dni)}`, { ...opcionesFetch, cache: "no-store" });
-  if (res.status === 401 || res.status === 403) return window.location.href = "/login";
-  const historial = await res.json();
+  historialPagoContexto = { dni, dnisRelacionados, nombre };
+  const historial = obtenerHistorialPagosRelacionado({
+    dni,
+    dnis: dnisRelacionados,
+    nombre
+  });
 
   if (!historial.length) {
     contenedor.innerHTML = `<div class="waitlist-empty">Ese cliente todavía no tiene pagos registrados.</div>`;
@@ -879,7 +950,15 @@ async function editarPagoDesdeModal(event) {
   editarPagoModalInstance?.hide();
   await cargarCiclosPago();
   await cargarPagos();
-  await verHistorialPagos(dni);
+  if (historialPagoContexto) {
+    await verHistorialPagos(
+      historialPagoContexto.dni,
+      historialPagoContexto.dnisRelacionados,
+      historialPagoContexto.nombre
+    );
+  } else {
+    await verHistorialPagos(dni, [dni], "");
+  }
 }
 
 function abrirModalEliminarPago(id, dni) {
@@ -905,7 +984,15 @@ async function eliminarPagoDesdeModal() {
   eliminarPagoModalInstance?.hide();
   await cargarCiclosPago();
   await cargarPagos();
-  await verHistorialPagos(dni);
+  if (historialPagoContexto) {
+    await verHistorialPagos(
+      historialPagoContexto.dni,
+      historialPagoContexto.dnisRelacionados,
+      historialPagoContexto.nombre
+    );
+  } else {
+    await verHistorialPagos(dni, [dni], "");
+  }
 }
 
 async function registrarPago(event) {
@@ -1637,7 +1724,14 @@ document.addEventListener("click", (event) => {
   }
 
   if (action === "ver-historial-pagos") {
-    verHistorialPagos(button.dataset.dni);
+    verHistorialPagos(
+      button.dataset.dni,
+      String(button.dataset.dnis || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      button.dataset.nombre || ""
+    );
     return;
   }
 

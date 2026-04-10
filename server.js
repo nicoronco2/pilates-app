@@ -289,6 +289,22 @@ function obtenerPeriodoLabel(fecha) {
     return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+async function contarRegistrosCliente(client, dni) {
+    const [reservas, espera, ciclos, pagos] = await Promise.all([
+        client.query("SELECT COUNT(*) FROM reservas WHERE dni = $1", [dni]),
+        client.query("SELECT COUNT(*) FROM lista_espera WHERE dni = $1", [dni]),
+        client.query("SELECT COUNT(*) FROM ciclos_pago WHERE dni = $1", [dni]),
+        client.query("SELECT COUNT(*) FROM pagos WHERE dni = $1", [dni])
+    ]);
+
+    return (
+        Number(reservas.rows[0].count) +
+        Number(espera.rows[0].count) +
+        Number(ciclos.rows[0].count) +
+        Number(pagos.rows[0].count)
+    );
+}
+
 async function recalcularCicloPago(client, cicloId) {
     const pagosResult = await client.query(
         "SELECT monto, fecha FROM pagos WHERE ciclo_id = $1 ORDER BY fecha ASC, id ASC",
@@ -611,19 +627,33 @@ app.post("/reprogramar", requireAdmin, async (req, res) => {
 });
 
 app.post("/eliminar-cliente", requireAdmin, async (req, res) => {
-  const { dni } = req.body;
+  const dni = validator.escape(String(req.body?.dni || "")).trim();
   if (!dni) return res.status(400).send("DNI requerido");
-  
-  const result = await pool.query(
-    "DELETE FROM reservas WHERE dni = $1",
-    [dni]
-  );
-  
-  if (result.rowCount === 0) {
-    return res.status(404).send("Cliente no encontrado");
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const totalRegistros = await contarRegistrosCliente(client, dni);
+    if (totalRegistros === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).send("Cliente no encontrado");
+    }
+
+    await client.query("DELETE FROM reservas WHERE dni = $1", [dni]);
+    await client.query("DELETE FROM lista_espera WHERE dni = $1", [dni]);
+    await client.query("DELETE FROM ciclos_pago WHERE dni = $1", [dni]);
+    await client.query("DELETE FROM pagos WHERE dni = $1", [dni]);
+
+    await client.query("COMMIT");
+    return res.send("OK");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/eliminar-cliente error:", err);
+    return res.status(500).send("Error interno");
+  } finally {
+    client.release();
   }
-  
-  return res.send("OK");
 });
 
 app.post("/editar-cliente", requireAdmin, async (req, res) => {
@@ -646,23 +676,15 @@ app.post("/editar-cliente", requireAdmin, async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const clienteActual = await client.query(
-      "SELECT id FROM reservas WHERE dni = $1 LIMIT 1",
-      [dniActual]
-    );
-
-    if (clienteActual.rowCount === 0) {
+    const totalRegistros = await contarRegistrosCliente(client, dniActual);
+    if (totalRegistros === 0) {
       await client.query("ROLLBACK");
       return res.status(404).send("Cliente no encontrado");
     }
 
     if (nuevoDni !== dniActual) {
-      const dniExistente = await client.query(
-        "SELECT id FROM reservas WHERE dni = $1 LIMIT 1",
-        [nuevoDni]
-      );
-
-      if (dniExistente.rowCount > 0) {
+      const dniExistente = await contarRegistrosCliente(client, nuevoDni);
+      if (dniExistente > 0) {
         await client.query("ROLLBACK");
         return res.status(400).send("Ya existe un cliente con ese DNI");
       }
@@ -670,6 +692,18 @@ app.post("/editar-cliente", requireAdmin, async (req, res) => {
 
     const result = await client.query(
       "UPDATE reservas SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
+      [nombre, telefono, nuevoDni, dniActual]
+    );
+    await client.query(
+      "UPDATE lista_espera SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
+      [nombre, telefono, nuevoDni, dniActual]
+    );
+    await client.query(
+      "UPDATE ciclos_pago SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
+      [nombre, telefono, nuevoDni, dniActual]
+    );
+    await client.query(
+      "UPDATE pagos SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
       [nombre, telefono, nuevoDni, dniActual]
     );
 
@@ -870,7 +904,12 @@ app.post("/registrar-pago", requireAdmin, async (req, res) => {
       }
 
       const saldoPendiente = Math.max(montoTotal - monto, 0);
-      const estado = tipoPago === "completo" || saldoPendiente <= 0 ? "completo" : "pendiente";
+      if (tipoPago === "completo" && saldoPendiente > 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).send("El monto abonado no cubre el pack completo");
+      }
+
+      const estado = saldoPendiente <= 0 ? "completo" : "pendiente";
 
       const nuevoCiclo = await client.query(
         `INSERT INTO ciclos_pago (nombre, telefono, dni, monto_total, monto_pagado, saldo_pendiente, estado, fecha_inicio, fecha_ultimo_pago, periodo_label, pack_referencia)

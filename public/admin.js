@@ -647,17 +647,53 @@ function seleccionarClientePago(dni) {
   actualizarClientePagoSeleccionado();
 }
 
+function obtenerClientesParaResumenPagos() {
+  const clientesMap = new Map();
+
+  obtenerClientesProcesados().forEach(({ cli, dni }) => {
+    const key = String(dni).trim();
+    clientesMap.set(key, {
+      nombre: cli.nombre,
+      telefono: cli.telefono,
+      dni: key
+    });
+  });
+
+  ciclosPagoGlobal.forEach((ciclo) => {
+    const key = String(ciclo.dni || "").trim();
+    if (!key) return;
+
+    if (clientesMap.has(key)) {
+      const actual = clientesMap.get(key);
+      clientesMap.set(key, {
+        nombre: actual.nombre || ciclo.nombre,
+        telefono: actual.telefono || ciclo.telefono,
+        dni: key
+      });
+      return;
+    }
+
+    clientesMap.set(key, {
+      nombre: ciclo.nombre,
+      telefono: ciclo.telefono,
+      dni: key
+    });
+  });
+
+  return Array.from(clientesMap.values()).sort((a, b) =>
+    String(a.nombre).localeCompare(String(b.nombre), "es", { sensitivity: "base" })
+  );
+}
+
 function renderizarResumenPagos() {
   const contenedor = document.getElementById("pagosResumenTabla");
   if (!contenedor) return;
 
   const query = document.getElementById("filtroPagos")?.value.trim().toLowerCase() || "";
-  const clientes = obtenerClientesProcesados()
-    .map(({ cli, dni }) => ({
-      nombre: cli.nombre,
-      telefono: cli.telefono,
-      dni,
-      ciclo: obtenerCicloPagoActual(dni, cli)
+  const clientes = obtenerClientesParaResumenPagos()
+    .map((cliente) => ({
+      ...cliente,
+      ciclo: obtenerCicloPagoActual(cliente.dni, cliente)
     }))
     .filter((cliente) =>
       !query ||

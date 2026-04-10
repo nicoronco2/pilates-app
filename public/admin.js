@@ -54,6 +54,14 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function normalizarTexto(valor) {
+  return String(valor ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function obtenerFechaHoy() {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Argentina/Buenos_Aires",
@@ -495,20 +503,35 @@ function renderizarDashboardEconomico() {
   }
 }
 
-function obtenerCicloPagoActual(dni) {
-  const ciclos = ciclosPagoGlobal
-    .filter((ciclo) => String(ciclo.dni) === String(dni))
-    .sort((a, b) => {
-      if (a.estado === "pendiente" && b.estado !== "pendiente") return -1;
-      if (a.estado !== "pendiente" && b.estado === "pendiente") return 1;
-      return String(b.fecha_ultimo_pago).localeCompare(String(a.fecha_ultimo_pago)) || Number(b.id) - Number(a.id);
+function ordenarCiclosPorPrioridad(ciclos) {
+  return [...ciclos].sort((a, b) => {
+    if (a.estado === "pendiente" && b.estado !== "pendiente") return -1;
+    if (a.estado !== "pendiente" && b.estado === "pendiente") return 1;
+    return String(b.fecha_ultimo_pago).localeCompare(String(a.fecha_ultimo_pago)) || Number(b.id) - Number(a.id);
+  });
+}
+
+function obtenerCicloPagoActual(dni, clienteDatos = null) {
+  let ciclos = ciclosPagoGlobal.filter((ciclo) => String(ciclo.dni) === String(dni));
+
+  if (!ciclos.length && clienteDatos) {
+    const nombre = normalizarTexto(clienteDatos.nombre);
+    const telefono = String(clienteDatos.telefono ?? "").trim();
+
+    ciclos = ciclosPagoGlobal.filter((ciclo) => {
+      const mismoTelefono = telefono && String(ciclo.telefono).trim() === telefono;
+      const mismoNombre = nombre && normalizarTexto(ciclo.nombre) === nombre;
+      return mismoTelefono || mismoNombre;
     });
+  }
+
+  ciclos = ordenarCiclosPorPrioridad(ciclos);
 
   return ciclos[0] || null;
 }
 
-function obtenerEstadoPagoCliente(dni) {
-  const ciclo = obtenerCicloPagoActual(dni);
+function obtenerEstadoPagoCliente(dni, clienteDatos = null) {
+  const ciclo = obtenerCicloPagoActual(dni, clienteDatos);
   if (!ciclo) {
     return {
       texto: "Sin pagos registrados",
@@ -580,8 +603,8 @@ function actualizarClientePagoSeleccionado() {
     return;
   }
 
-  const ciclo = obtenerCicloPagoActual(clientePagoSeleccionado.dni);
-  const estado = obtenerEstadoPagoCliente(clientePagoSeleccionado.dni);
+  const ciclo = obtenerCicloPagoActual(clientePagoSeleccionado.dni, clientePagoSeleccionado);
+  const estado = obtenerEstadoPagoCliente(clientePagoSeleccionado.dni, clientePagoSeleccionado);
 
   contenedor.className = "mt-3";
   contenedor.innerHTML = `
@@ -611,7 +634,7 @@ function seleccionarClientePago(dni) {
   document.getElementById("pagoBusquedaCliente").value = cliente.nombre;
   document.getElementById("pagoBusquedaResultados").innerHTML = "";
 
-  const ciclo = obtenerCicloPagoActual(cliente.dni);
+  const ciclo = obtenerCicloPagoActual(cliente.dni, cliente);
   if (ciclo) {
     document.getElementById("pagoMontoTotal").value = Number(ciclo.monto_total);
     document.getElementById("pagoTipo").value = Number(ciclo.saldo_pendiente) > 0 ? "parcial" : "completo";
@@ -634,7 +657,7 @@ function renderizarResumenPagos() {
       nombre: cli.nombre,
       telefono: cli.telefono,
       dni,
-      ciclo: obtenerCicloPagoActual(dni)
+      ciclo: obtenerCicloPagoActual(dni, cli)
     }))
     .filter((cliente) =>
       !query ||
@@ -666,7 +689,7 @@ function renderizarResumenPagos() {
         </thead>
         <tbody>
           ${clientes.map((cliente) => {
-            const estado = obtenerEstadoPagoCliente(cliente.dni);
+            const estado = obtenerEstadoPagoCliente(cliente.dni, cliente);
             const ciclo = cliente.ciclo;
             return `
               <tr>
@@ -989,7 +1012,7 @@ function pintarClientes() {
   }
 
   clientesFiltrados.forEach(({ dni, lista, cli, restantes, recordatorio, renovacion }) => {
-    const pago = obtenerEstadoPagoCliente(dni);
+    const pago = obtenerEstadoPagoCliente(dni, cli);
     tabla.innerHTML += `
       <tr>
         <td>${escapeHtml(cli.nombre)}</td>
@@ -1273,7 +1296,7 @@ async function buscarCliente() {
   const restantes = lista.filter((item) => item.asistida == 0).length;
   const asistidas = lista.filter((item) => item.asistida == 1).length;
   const estadoPack = obtenerEstadoPack(restantes);
-  const estadoPago = obtenerEstadoPagoCliente(cliente.dni);
+  const estadoPago = obtenerEstadoPagoCliente(cliente.dni, cliente);
   const hoyPendiente = lista
     .filter((item) => item.dia === obtenerFechaHoy() && item.asistida == 0)
     .sort((a, b) => a.hora.localeCompare(b.hora))[0];

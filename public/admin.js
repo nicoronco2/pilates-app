@@ -75,6 +75,15 @@ function formatearFecha(fechaTexto) {
   return `${day}/${month}/${year}`;
 }
 
+function formatearDiaSemana(fechaTexto) {
+  const [year, month, day] = String(fechaTexto).split("-").map(Number);
+  if (!year || !month || !day) return fechaTexto;
+
+  const fecha = new Date(year, month - 1, day);
+  const nombre = fecha.toLocaleDateString("es-AR", { weekday: "long" });
+  return nombre.charAt(0).toUpperCase() + nombre.slice(1);
+}
+
 function formatearMonto(valor) {
   const numero = Number(valor) || 0;
   return numero.toLocaleString("es-AR", {
@@ -327,7 +336,7 @@ function renderizarMetricasAdmin() {
         const [dia, hora] = horarioMasCargado[0].split("|");
         return {
           valor: `${horarioMasCargado[1]}/4`,
-          ayuda: `${formatearFecha(dia)} a las ${hora}`
+          ayuda: `${formatearDiaSemana(dia)} a las ${hora} hs`
         };
       })()
     : {

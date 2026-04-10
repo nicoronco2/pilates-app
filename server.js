@@ -790,6 +790,22 @@ app.get("/pagos-historial", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/pagos", requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT p.*, c.monto_total, c.monto_pagado, c.saldo_pendiente, c.estado, c.periodo_label, c.pack_referencia
+       FROM pagos p
+       INNER JOIN ciclos_pago c ON c.id = p.ciclo_id
+       ORDER BY p.fecha DESC, p.id DESC`
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("/pagos error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
 app.post("/registrar-pago", requireAdmin, async (req, res) => {
   let { nombre, telefono, dni, monto, montoTotal, fecha, formaPago, tipoPago } = req.body;
 

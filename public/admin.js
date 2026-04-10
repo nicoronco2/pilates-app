@@ -4,6 +4,7 @@ let horaAsistenciaHoy = "";
 let clientesFiltrados = [];
 let listaEsperaGlobal = [];
 let ciclosPagoGlobal = [];
+let pagosGlobal = [];
 let clientePagoSeleccionado = null;
 let editarPagoModalInstance = null;
 let eliminarPagoModalInstance = null;
@@ -99,6 +100,12 @@ function formatearReferenciaCiclo(ciclo) {
   if (ciclo.periodo_label) partes.push(String(ciclo.periodo_label));
   if (ciclo.pack_referencia) partes.push(`Pack ${ciclo.pack_referencia} clases`);
   return partes.join(" · ");
+}
+
+function obtenerMesClave(fechaTexto) {
+  const [year, month] = String(fechaTexto).split("-");
+  if (!year || !month) return "";
+  return `${year}-${month}`;
 }
 
 function sumarDias(fechaTexto, dias) {
@@ -381,6 +388,113 @@ function renderizarMetricasAdmin() {
   `).join("");
 }
 
+function renderizarDashboardEconomico() {
+  const cards = document.getElementById("dashboardEconomicoCards");
+  const deuda = document.getElementById("dashboardEconomicoDeuda");
+  const pagos = document.getElementById("dashboardEconomicoPagos");
+  if (!cards || !deuda || !pagos) return;
+
+  const hoy = obtenerFechaHoy();
+  const mesActual = obtenerMesClave(hoy);
+  const pagosDelMes = pagosGlobal.filter((pago) => obtenerMesClave(pago.fecha) === mesActual);
+  const pagosDeHoy = pagosGlobal.filter((pago) => pago.fecha === hoy);
+  const deudaClientes = ciclosPagoGlobal
+    .filter((ciclo) => Number(ciclo.saldo_pendiente) > 0)
+    .sort((a, b) => Number(b.saldo_pendiente) - Number(a.saldo_pendiente) || String(a.nombre).localeCompare(String(b.nombre)));
+
+  const ingresosMes = pagosDelMes.reduce((acc, pago) => acc + Number(pago.monto), 0);
+  const ingresosHoy = pagosDeHoy.reduce((acc, pago) => acc + Number(pago.monto), 0);
+  const deudaTotal = deudaClientes.reduce((acc, ciclo) => acc + Number(ciclo.saldo_pendiente), 0);
+  const pagosCompletos = ciclosPagoGlobal.filter((ciclo) => Number(ciclo.saldo_pendiente) <= 0).length;
+
+  const resumen = [
+    {
+      label: "Ingresos del mes",
+      value: formatearMonto(ingresosMes),
+      help: `${pagosDelMes.length} pago${pagosDelMes.length === 1 ? "" : "s"} registrados este mes.`
+    },
+    {
+      label: "Ingresos de hoy",
+      value: formatearMonto(ingresosHoy),
+      help: `${pagosDeHoy.length} movimiento${pagosDeHoy.length === 1 ? "" : "s"} cargado${pagosDeHoy.length === 1 ? "" : "s"} hoy.`
+    },
+    {
+      label: "Deuda total",
+      value: formatearMonto(deudaTotal),
+      help: `${deudaClientes.length} cliente${deudaClientes.length === 1 ? "" : "s"} con saldo pendiente.`
+    },
+    {
+      label: "Packs pagos completos",
+      value: String(pagosCompletos),
+      help: "Ciclos de pago ya cerrados o abonados por completo."
+    }
+  ];
+
+  cards.innerHTML = resumen.map((item) => `
+    <div class="economic-card">
+      <div class="economic-card-label">${escapeHtml(item.label)}</div>
+      <div class="economic-card-value">${escapeHtml(item.value)}</div>
+      <div class="economic-card-help">${escapeHtml(item.help)}</div>
+    </div>
+  `).join("");
+
+  if (!deudaClientes.length) {
+    deuda.innerHTML = `<div class="waitlist-empty">No hay clientes con deuda pendiente en este momento.</div>`;
+  } else {
+    deuda.innerHTML = `
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Cliente</th>
+              <th>Período</th>
+              <th>Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${deudaClientes.slice(0, 8).map((ciclo) => `
+              <tr>
+                <td>${escapeHtml(ciclo.nombre)}</td>
+                <td>${escapeHtml(formatearReferenciaCiclo(ciclo) || "-")}</td>
+                <td>${escapeHtml(formatearMonto(ciclo.saldo_pendiente))}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  if (!pagosGlobal.length) {
+    pagos.innerHTML = `<div class="waitlist-empty">Todavía no hay pagos registrados.</div>`;
+  } else {
+    pagos.innerHTML = `
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Cliente</th>
+              <th>Fecha</th>
+              <th>Monto</th>
+              <th>Forma</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pagosGlobal.slice(0, 8).map((pago) => `
+              <tr>
+                <td>${escapeHtml(pago.nombre)}</td>
+                <td>${escapeHtml(formatearFecha(pago.fecha))}</td>
+                <td>${escapeHtml(formatearMonto(pago.monto))}</td>
+                <td>${escapeHtml(pago.forma_pago)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+}
+
 function obtenerCicloPagoActual(dni) {
   const ciclos = ciclosPagoGlobal
     .filter((ciclo) => String(ciclo.dni) === String(dni))
@@ -590,6 +704,14 @@ async function cargarCiclosPago() {
   ciclosPagoGlobal = await res.json();
   renderizarResumenPagos();
   actualizarClientePagoSeleccionado();
+  renderizarDashboardEconomico();
+}
+
+async function cargarPagos() {
+  const res = await fetch("/pagos", { ...opcionesFetch, cache: "no-store" });
+  if (res.status === 401 || res.status === 403) return window.location.href = "/login";
+  pagosGlobal = await res.json();
+  renderizarDashboardEconomico();
 }
 
 async function verHistorialPagos(dni) {
@@ -697,6 +819,7 @@ async function editarPagoDesdeModal(event) {
 
   editarPagoModalInstance?.hide();
   await cargarCiclosPago();
+  await cargarPagos();
   await verHistorialPagos(dni);
 }
 
@@ -722,6 +845,7 @@ async function eliminarPagoDesdeModal() {
 
   eliminarPagoModalInstance?.hide();
   await cargarCiclosPago();
+  await cargarPagos();
   await verHistorialPagos(dni);
 }
 
@@ -759,10 +883,11 @@ async function registrarPago(event) {
   if (clientePagoSeleccionado) {
     document.getElementById("pagoNombre").value = clientePagoSeleccionado.nombre;
     document.getElementById("pagoTelefono").value = clientePagoSeleccionado.telefono;
-    document.getElementById("pagoDni").value = clientePagoSeleccionado.dni;
+  document.getElementById("pagoDni").value = clientePagoSeleccionado.dni;
   }
 
   await cargarCiclosPago();
+  await cargarPagos();
   await verHistorialPagos(payload.dni);
 }
 
@@ -833,6 +958,7 @@ async function cargarReservas() {
   });
 
   await cargarCiclosPago();
+  await cargarPagos();
   renderizarMetricasAdmin();
   pintarClientes();
   await cargarCalendario();

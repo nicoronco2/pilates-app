@@ -221,6 +221,54 @@
             font-size:.92rem;
         }
 
+        .economic-dashboard{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:20px;
+            padding:18px;
+            background:rgba(248,249,250,0.94);
+        }
+
+        .economic-grid{
+            display:grid;
+            gap:14px;
+            grid-template-columns:repeat(auto-fit, minmax(190px, 1fr));
+        }
+
+        .economic-card{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:16px;
+            padding:14px;
+            background:#fff;
+        }
+
+        .economic-card-label{
+            color:#6c757d;
+            font-size:.84rem;
+            text-transform:uppercase;
+            letter-spacing:.06em;
+            margin-bottom:6px;
+        }
+
+        .economic-card-value{
+            font-size:1.6rem;
+            font-weight:700;
+            line-height:1.1;
+            margin-bottom:6px;
+        }
+
+        .economic-card-help{
+            color:#6c757d;
+            font-size:.92rem;
+            line-height:1.4;
+        }
+
+        .economic-panel{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:16px;
+            padding:14px;
+            background:#fff;
+        }
+
         [data-bs-theme="dark"] .filters-panel{
             background:#141922;
             border-color:#2a313a;
@@ -234,7 +282,10 @@
 
         [data-bs-theme="dark"] .payment-search-item,
         [data-bs-theme="dark"] .payment-selected,
-        [data-bs-theme="dark"] .payment-history-card{
+        [data-bs-theme="dark"] .payment-history-card,
+        [data-bs-theme="dark"] .economic-dashboard,
+        [data-bs-theme="dark"] .economic-card,
+        [data-bs-theme="dark"] .economic-panel{
             background:#141922;
             border-color:#2a313a;
         }
@@ -256,7 +307,9 @@
         [data-bs-theme="dark"] .admin-metric-label,
         [data-bs-theme="dark"] .admin-metric-help,
         [data-bs-theme="dark"] .waitlist-empty,
-        [data-bs-theme="dark"] .renew-note{
+        [data-bs-theme="dark"] .renew-note,
+        [data-bs-theme="dark"] .economic-card-label,
+        [data-bs-theme="dark"] .economic-card-help{
             color:#adb5bd;
         }
 
@@ -303,6 +356,32 @@
 </div>
 
 <div id="adminMetricas" class="admin-metrics mb-4"></div>
+
+<div class="economic-dashboard mb-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+        <div>
+            <h4 class="mb-1">Dashboard económico</h4>
+            <p class="mb-0 filters-meta">Resumen rápido de ingresos, deuda y movimiento de pagos.</p>
+        </div>
+    </div>
+
+    <div id="dashboardEconomicoCards" class="economic-grid mb-3"></div>
+
+    <div class="row g-3">
+        <div class="col-12 col-xl-6">
+            <div class="economic-panel">
+                <h5 class="mb-3">Clientes con saldo pendiente</h5>
+                <div id="dashboardEconomicoDeuda"></div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-6">
+            <div class="economic-panel">
+                <h5 class="mb-3">Últimos pagos registrados</h5>
+                <div id="dashboardEconomicoPagos"></div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="card shadow-sm mb-4">
     <div class="card-body">

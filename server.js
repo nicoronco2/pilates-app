@@ -346,6 +346,205 @@ function enviarCsv(res, filename, headers, rows) {
     return res.send(`\uFEFF${csv}`);
 }
 
+function normalizarTexto(valor) {
+    return String(valor ?? "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+}
+
+function telefonoPareceValido(telefono) {
+    const soloDigitos = String(telefono ?? "").replace(/\D/g, "");
+    return soloDigitos.length >= 6;
+}
+
+function obtenerClaveClienteCanonico(cliente) {
+    const nombre = normalizarTexto(cliente?.nombre);
+    const telefono = String(cliente?.telefono ?? "").trim();
+    const dni = String(cliente?.dni ?? "").trim();
+    return telefono ? `${nombre}|${telefono}` : `${nombre}|${dni}`;
+}
+
+function obtenerTiempoActividad(valor) {
+    if (!valor) return 0;
+    if (valor instanceof Date) return valor.getTime();
+
+    const texto = String(valor).trim();
+    if (!texto) return 0;
+
+    const normalizado = /^\d{4}-\d{2}-\d{2}$/.test(texto) ? `${texto}T00:00:00Z` : texto;
+    const timestamp = Date.parse(normalizado);
+    return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function obtenerPrioridadFuenteCliente(fuente) {
+    const prioridades = {
+        reservas: 4,
+        lista_espera: 3,
+        ciclos_pago: 2,
+        pagos: 1
+    };
+    return prioridades[fuente] || 0;
+}
+
+function crearOrdenCliente(registro) {
+    return {
+        actividad: obtenerTiempoActividad(registro.actividad),
+        fuente: obtenerPrioridadFuenteCliente(registro.fuente),
+        id: Number(registro.actividad_id) || 0
+    };
+}
+
+function compararOrdenCliente(a, b) {
+    if (a.actividad !== b.actividad) return a.actividad - b.actividad;
+    if (a.fuente !== b.fuente) return a.fuente - b.fuente;
+    return a.id - b.id;
+}
+
+function registrosPuedenSerMismoCliente(cliente, registro) {
+    const dniCliente = String(cliente?.dni || "").trim();
+    const dniRegistro = String(registro?.dni || "").trim();
+    if (dniCliente && dniRegistro && dniCliente === dniRegistro) return true;
+
+    const claveCliente = obtenerClaveClienteCanonico(cliente);
+    const claveRegistro = obtenerClaveClienteCanonico(registro);
+    if (claveCliente && claveCliente === claveRegistro) return true;
+
+    const nombreCliente = normalizarTexto(cliente?.nombre);
+    const nombreRegistro = normalizarTexto(registro?.nombre);
+    if (!nombreCliente || nombreCliente !== nombreRegistro) return false;
+
+    const telefonoCliente = String(cliente?.telefono || "").trim();
+    const telefonoRegistro = String(registro?.telefono || "").trim();
+    const telefonoClienteValido = telefonoPareceValido(telefonoCliente);
+    const telefonoRegistroValido = telefonoPareceValido(telefonoRegistro);
+
+    return (
+        telefonoCliente === telefonoRegistro ||
+        !telefonoClienteValido ||
+        !telefonoRegistroValido
+    );
+}
+
+async function obtenerIndiceClientesCanonicos(client) {
+    const result = await client.query(`
+      SELECT nombre, telefono, dni, fuente, actividad, actividad_id
+      FROM (
+        SELECT nombre, telefono, dni, 'reservas' AS fuente, dia AS actividad, id AS actividad_id
+        FROM reservas
+        UNION ALL
+        SELECT nombre, telefono, dni, 'lista_espera' AS fuente, created_at::text AS actividad, id AS actividad_id
+        FROM lista_espera
+        UNION ALL
+        SELECT nombre, telefono, dni, 'ciclos_pago' AS fuente, fecha_ultimo_pago AS actividad, id AS actividad_id
+        FROM ciclos_pago
+        UNION ALL
+        SELECT nombre, telefono, dni, 'pagos' AS fuente, fecha AS actividad, id AS actividad_id
+        FROM pagos
+      ) registros
+    `);
+
+    const clientes = [];
+
+    result.rows.forEach((row) => {
+        const registro = {
+            nombre: String(row.nombre || "").trim(),
+            telefono: String(row.telefono || "").trim(),
+            dni: String(row.dni || "").trim(),
+            fuente: row.fuente,
+            actividad: row.actividad,
+            actividad_id: row.actividad_id
+        };
+
+        if (!registro.nombre && !registro.telefono && !registro.dni) {
+            return;
+        }
+
+        const ordenRegistro = crearOrdenCliente(registro);
+        const actual = clientes.find((cliente) => registrosPuedenSerMismoCliente(cliente, registro));
+
+        if (!actual) {
+            clientes.push({
+                nombre: registro.nombre,
+                telefono: registro.telefono,
+                dni: registro.dni,
+                dnisRelacionados: new Set(registro.dni ? [registro.dni] : []),
+                orden: ordenRegistro
+            });
+            return;
+        }
+
+        if (registro.dni) {
+            actual.dnisRelacionados.add(registro.dni);
+        }
+
+        if (compararOrdenCliente(actual.orden, ordenRegistro) <= 0) {
+            actual.nombre = registro.nombre || actual.nombre;
+            actual.telefono = registro.telefono || actual.telefono;
+            actual.dni = registro.dni || actual.dni;
+            actual.orden = ordenRegistro;
+            return;
+        }
+
+        if (!actual.nombre && registro.nombre) actual.nombre = registro.nombre;
+        if (!actual.telefono && registro.telefono) actual.telefono = registro.telefono;
+        if (!actual.dni && registro.dni) actual.dni = registro.dni;
+    });
+
+    const clientesOrdenados = clientes
+        .map((cliente) => ({
+            nombre: cliente.nombre,
+            telefono: cliente.telefono,
+            dni: cliente.dni,
+            dnisRelacionados: Array.from(cliente.dnisRelacionados)
+        }))
+        .sort((a, b) =>
+            String(a.nombre).localeCompare(String(b.nombre), "es", { sensitivity: "base" }) ||
+            String(a.dni).localeCompare(String(b.dni))
+        );
+
+    const clientesPorClave = new Map();
+    const clientesPorDni = new Map();
+
+    clientesOrdenados.forEach((cliente) => {
+        clientesPorClave.set(obtenerClaveClienteCanonico(cliente), cliente);
+        cliente.dnisRelacionados.forEach((dniRelacionado) => {
+            if (dniRelacionado) {
+                clientesPorDni.set(dniRelacionado, cliente);
+            }
+        });
+    });
+
+    return { clientes: clientesOrdenados, clientesPorClave, clientesPorDni };
+}
+
+function resolverClienteCanonico(indice, registro) {
+    const dni = String(registro?.dni || "").trim();
+    if (dni && indice.clientesPorDni.has(dni)) {
+        return indice.clientesPorDni.get(dni);
+    }
+
+    const clave = obtenerClaveClienteCanonico(registro);
+    if (clave && indice.clientesPorClave.has(clave)) {
+        return indice.clientesPorClave.get(clave);
+    }
+
+    return indice.clientes.find((cliente) => registrosPuedenSerMismoCliente(cliente, registro)) || null;
+}
+
+function aplicarClienteCanonico(registro, indice) {
+    const cliente = resolverClienteCanonico(indice, registro);
+    if (!cliente) return registro;
+
+    return {
+        ...registro,
+        nombre: cliente.nombre || registro.nombre,
+        telefono: cliente.telefono || registro.telefono,
+        dni: cliente.dni || registro.dni
+    };
+}
+
 async function contarRegistrosCliente(client, dni) {
     const [reservas, espera, ciclos, pagos] = await Promise.all([
         client.query("SELECT COUNT(*) FROM reservas WHERE dni = $1", [dni]),
@@ -747,26 +946,48 @@ app.post("/editar-cliente", requireAdmin, async (req, res) => {
       }
     }
 
-    const result = await client.query(
+    const ciclosRelacionadosResult = await client.query(
+      "SELECT id FROM ciclos_pago WHERE dni = $1",
+      [dniActual]
+    );
+    const ciclosRelacionados = ciclosRelacionadosResult.rows
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isInteger(id));
+
+    const reservasActualizadas = await client.query(
       "UPDATE reservas SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
       [nombre, telefono, nuevoDni, dniActual]
     );
-    await client.query(
+    const esperaActualizada = await client.query(
       "UPDATE lista_espera SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
       [nombre, telefono, nuevoDni, dniActual]
     );
-    await client.query(
+    const ciclosActualizados = await client.query(
       "UPDATE ciclos_pago SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
       [nombre, telefono, nuevoDni, dniActual]
     );
-    await client.query(
-      "UPDATE pagos SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
-      [nombre, telefono, nuevoDni, dniActual]
-    );
+    let pagosActualizados;
+    if (ciclosRelacionados.length > 0) {
+      pagosActualizados = await client.query(
+        "UPDATE pagos SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4 OR ciclo_id = ANY($5::int[])",
+        [nombre, telefono, nuevoDni, dniActual, ciclosRelacionados]
+      );
+    } else {
+      pagosActualizados = await client.query(
+        "UPDATE pagos SET nombre = $1, telefono = $2, dni = $3 WHERE dni = $4",
+        [nombre, telefono, nuevoDni, dniActual]
+      );
+    }
+
+    const totalActualizado =
+      reservasActualizadas.rowCount +
+      esperaActualizada.rowCount +
+      ciclosActualizados.rowCount +
+      pagosActualizados.rowCount;
 
     await client.query("COMMIT");
 
-    if (result.rowCount === 0) {
+    if (totalActualizado === 0) {
       return res.status(404).send("Cliente no encontrado");
     }
 
@@ -850,10 +1071,11 @@ app.post("/eliminar-lista-espera", requireAdmin, async (req, res) => {
 
 app.get("/ciclos-pago", requireAdmin, async (req, res) => {
   try {
+    const indiceClientes = await obtenerIndiceClientesCanonicos(pool);
     const result = await pool.query(
       "SELECT * FROM ciclos_pago ORDER BY fecha_ultimo_pago DESC, id DESC"
     );
-    return res.json(result.rows);
+    return res.json(result.rows.map((row) => aplicarClienteCanonico(row, indiceClientes)));
   } catch (err) {
     console.error("/ciclos-pago error:", err);
     return res.status(500).send("Error interno");
@@ -865,16 +1087,17 @@ app.get("/pagos-historial", requireAdmin, async (req, res) => {
   if (!dni) return res.status(400).send("DNI requerido");
 
   try {
+    const indiceClientes = await obtenerIndiceClientesCanonicos(pool);
     const result = await pool.query(
       `SELECT p.*, c.monto_total, c.monto_pagado, c.saldo_pendiente, c.estado, c.periodo_label, c.pack_referencia
        FROM pagos p
        INNER JOIN ciclos_pago c ON c.id = p.ciclo_id
-       WHERE p.dni = $1
+       WHERE p.dni = $1 OR c.dni = $1
        ORDER BY p.fecha DESC, p.id DESC`,
       [dni]
     );
 
-    return res.json(result.rows);
+    return res.json(result.rows.map((row) => aplicarClienteCanonico(row, indiceClientes)));
   } catch (err) {
     console.error("/pagos-historial error:", err);
     return res.status(500).send("Error interno");
@@ -883,6 +1106,7 @@ app.get("/pagos-historial", requireAdmin, async (req, res) => {
 
 app.get("/pagos", requireAdmin, async (req, res) => {
   try {
+    const indiceClientes = await obtenerIndiceClientesCanonicos(pool);
     const result = await pool.query(
       `SELECT p.*, c.monto_total, c.monto_pagado, c.saldo_pendiente, c.estado, c.periodo_label, c.pack_referencia
        FROM pagos p
@@ -890,7 +1114,7 @@ app.get("/pagos", requireAdmin, async (req, res) => {
        ORDER BY p.fecha DESC, p.id DESC`
     );
 
-    return res.json(result.rows);
+    return res.json(result.rows.map((row) => aplicarClienteCanonico(row, indiceClientes)));
   } catch (err) {
     console.error("/pagos error:", err);
     return res.status(500).send("Error interno");
@@ -899,25 +1123,13 @@ app.get("/pagos", requireAdmin, async (req, res) => {
 
 app.get("/export/clientes", requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT DISTINCT nombre, telefono, dni
-      FROM (
-        SELECT nombre, telefono, dni FROM reservas
-        UNION ALL
-        SELECT nombre, telefono, dni FROM ciclos_pago
-        UNION ALL
-        SELECT nombre, telefono, dni FROM lista_espera
-        UNION ALL
-        SELECT nombre, telefono, dni FROM pagos
-      ) clientes
-      ORDER BY nombre ASC, dni ASC
-    `);
+    const indiceClientes = await obtenerIndiceClientesCanonicos(pool);
 
     return enviarCsv(
       res,
       "clientes.csv",
       ["nombre", "telefono", "dni"],
-      result.rows.map((row) => [row.nombre, row.telefono, row.dni])
+      indiceClientes.clientes.map((row) => [row.nombre, row.telefono, row.dni])
     );
   } catch (err) {
     console.error("/export/clientes error:", err);
@@ -945,6 +1157,7 @@ app.get("/export/reservas", requireAdmin, async (req, res) => {
 
 app.get("/export/pagos", requireAdmin, async (req, res) => {
   try {
+    const indiceClientes = await obtenerIndiceClientesCanonicos(pool);
     const result = await pool.query(`
       SELECT
         p.id,
@@ -965,11 +1178,13 @@ app.get("/export/pagos", requireAdmin, async (req, res) => {
       ORDER BY p.fecha DESC, p.id DESC
     `);
 
+    const pagosCanonicos = result.rows.map((row) => aplicarClienteCanonico(row, indiceClientes));
+
     return enviarCsv(
       res,
       "pagos.csv",
       ["id", "nombre", "telefono", "dni", "fecha", "monto", "forma_pago", "monto_total", "monto_pagado", "saldo_pendiente", "estado", "periodo_label", "pack_referencia"],
-      result.rows.map((row) => [
+      pagosCanonicos.map((row) => [
         row.id,
         row.nombre,
         row.telefono,

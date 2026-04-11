@@ -1,11 +1,28 @@
-﻿const express = require("express");
+﻿const fs = require("fs");
+const express = require("express");
 const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
-require("dotenv").config();
+const dotenv = require("dotenv");
 const validator = require("validator");
 const helmet = require("helmet");
 const { Pool } = require("pg");
+
+const envFiles = [
+    process.env.ENV_FILE,
+    "secreto-demo.env",
+    "secreto.env",
+    ".env"
+].filter(Boolean);
+
+for (const envFile of envFiles) {
+    const resolvedPath = path.isAbsolute(envFile) ? envFile : path.join(__dirname, envFile);
+    if (fs.existsSync(resolvedPath)) {
+        dotenv.config({ path: resolvedPath });
+        break;
+    }
+}
+
 
 const app = express();
 const HORARIOS_VALIDOS = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
@@ -1424,6 +1441,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
     console.log("Servidor funcionando seguro");
 });
+
 
 
 

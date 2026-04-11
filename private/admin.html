@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -269,6 +269,13 @@
             background:#fff;
         }
 
+        .backup-panel{
+            border:1px solid rgba(0,0,0,0.08);
+            border-radius:18px;
+            padding:16px;
+            background:rgba(248,249,250,0.94);
+        }
+
         [data-bs-theme="dark"] .filters-panel{
             background:#141922;
             border-color:#2a313a;
@@ -285,7 +292,8 @@
         [data-bs-theme="dark"] .payment-history-card,
         [data-bs-theme="dark"] .economic-dashboard,
         [data-bs-theme="dark"] .economic-card,
-        [data-bs-theme="dark"] .economic-panel{
+        [data-bs-theme="dark"] .economic-panel,
+        [data-bs-theme="dark"] .backup-panel{
             background:#141922;
             border-color:#2a313a;
         }
@@ -339,7 +347,7 @@
     <h1 class="m-0">Panel de reservas</h1>
 
     <div class="d-flex gap-2 top-actions">
-        <!-- BOTÓN NUEVO -->
+        <!-- BOTÃ“N NUEVO -->
         <a href="/reservar.html" class="btn btn-primary">
             Nueva reserva
         </a>
@@ -356,6 +364,21 @@
 </div>
 
 <div id="adminMetricas" class="admin-metrics mb-4"></div>
+
+<div class="backup-panel mb-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+        <div>
+            <h4 class="mb-1">Respaldo rápido</h4>
+            <p class="mb-0 filters-meta">Descargá un CSV con los datos más importantes antes de hacer cambios grandes o como backup del negocio.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/export/clientes" class="btn btn-outline-primary">Exportar clientes</a>
+            <a href="/export/reservas" class="btn btn-outline-primary">Exportar reservas</a>
+            <a href="/export/pagos" class="btn btn-outline-primary">Exportar pagos</a>
+            <a href="/export/lista-espera" class="btn btn-outline-primary">Exportar espera</a>
+        </div>
+    </div>
+</div>
 
 <div class="economic-dashboard mb-4">
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
@@ -446,7 +469,7 @@
                 </div>
 
                 <div id="historialPagosCliente" class="payment-history-card mt-3">
-                    <div class="waitlist-empty">Seleccioná “Ver historial” en un cliente para revisar sus pagos.</div>
+                    <div class="waitlist-empty">Seleccioná "Ver historial" en un cliente para revisar sus pagos.</div>
                 </div>
             </div>
         </div>
@@ -561,7 +584,7 @@
         <div class="filters-panel mb-3">
             <div class="row g-2">
                 <div class="col-12 col-lg-5">
-                    <input type="text" id="filtroBusqueda" class="form-control" placeholder="Buscar por nombre, DNI o teléfono">
+                    <input type="text" id="filtroBusqueda" class="form-control" placeholder="Buscar por nombre, DNI o telÃ©fono">
                 </div>
                 <div class="col-12 col-sm-6 col-lg-3">
                     <select id="filtroPack" class="form-select">
@@ -602,7 +625,7 @@
                         <th>Recordatorio</th>
                         <th>Pago</th>
                         <th>Clases</th>
-                        <th>Acción</th>
+                        <th>AcciÃ³n</th>
                     </tr>
                 </thead>
 
@@ -664,8 +687,8 @@
             <div class="modal-body">
                 <input type="hidden" id="eliminarPagoId">
                 <input type="hidden" id="eliminarPagoDni">
-                <p class="mb-2">¿Querés eliminar este pago del historial?</p>
-                <p class="payment-modal-note mb-0">El sistema va a recalcular automáticamente el saldo y el estado del cliente.</p>
+                <p class="mb-2">Â¿QuerÃ©s eliminar este pago del historial?</p>
+                <p class="payment-modal-note mb-0">El sistema va a recalcular automÃ¡ticamente el saldo y el estado del cliente.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -677,3 +700,4 @@
 
 </body>
 </html>
+

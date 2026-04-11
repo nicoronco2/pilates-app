@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
@@ -38,7 +38,7 @@ app.use(helmet({
   }
 }));
 
-// quitá o comenta esta línea para no reescribir CSP a “sin CSP”
+// quitÃ¡ o comenta esta lÃ­nea para no reescribir CSP a â€œsin CSPâ€
  // app.use(helmet({ contentSecurityPolicy: false }));
 
 /* =====================================================
@@ -52,6 +52,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const isProduction = process.env.NODE_ENV === "production";
+const sessionSecret = process.env.SESSION_SECRET;
+const databaseUrl = process.env.DATABASE_URL;
+const adminUsersEnv = process.env.ADMIN_USERS_JSON;
+
+if (isProduction && !sessionSecret) {
+    throw new Error("SESSION_SECRET es obligatorio en producción");
+}
+
+if (isProduction && !databaseUrl) {
+    throw new Error("DATABASE_URL es obligatorio en producción");
+}
 
 // HTTPS obligatorio en producción
 app.use((req, res, next) => {
@@ -65,7 +76,7 @@ app.set("trust proxy", 1);
 
 app.use(session({
     name: "pilates-session",
-    secret: process.env.SESSION_SECRET || "secreto123",
+    secret: sessionSecret || "secreto123",
     resave: false,
     saveUninitialized: false,
     proxy: true,
@@ -82,7 +93,7 @@ app.use(session({
 ===================================================== */
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
+    connectionString: databaseUrl
 });
 
 // verificar y loguear
@@ -173,7 +184,7 @@ CREATE TABLE IF NOT EXISTS pagos (
    USUARIOS ADMIN (HASH)
 ===================================================== */
 
-const usuarios = [
+const usuariosBase = [
     {
         user: "nicoronco2026",
         pass: "$2b$10$BEfmPkbaazW0wmWyxEX3eunZ3EoFwEr8SzET.BtNTd.Cz7pGMcyei"
@@ -183,6 +194,36 @@ const usuarios = [
         pass: "$2b$10$rRAR0nWhPTe8zI0HKE.IQecu0WCyZDoBnCDJ5KvBzqPjcVELVSTbm"
     }
 ];
+
+function obtenerUsuariosAdmin() {
+    if (!adminUsersEnv) {
+        if (isProduction) {
+            throw new Error("ADMIN_USERS_JSON es obligatorio en producción");
+        }
+        return usuariosBase;
+    }
+
+    let parsed;
+    try {
+        parsed = JSON.parse(adminUsersEnv);
+    } catch (error) {
+        throw new Error(`ADMIN_USERS_JSON inválido: ${error.message}`);
+    }
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error("ADMIN_USERS_JSON debe ser un array no vacío");
+    }
+
+    parsed.forEach((usuario, index) => {
+        if (!usuario?.user || !usuario?.pass) {
+            throw new Error(`Usuario admin inválido en posición ${index}`);
+        }
+    });
+
+    return parsed;
+}
+
+const usuarios = obtenerUsuariosAdmin();
 
 function esTextoNumerico(valor) {
     return validator.isNumeric(String(valor || "").trim(), { no_symbols: true });
@@ -287,6 +328,22 @@ function obtenerPeriodoLabel(fecha) {
 
     const texto = formatter.format(partes.date);
     return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+function escapeCsvValue(value) {
+    const normalized = String(value ?? "").replace(/\r?\n/g, " ").replace(/"/g, '""');
+    return `"${normalized}"`;
+}
+
+function enviarCsv(res, filename, headers, rows) {
+    const csv = [
+        headers.map(escapeCsvValue).join(","),
+        ...rows.map((row) => row.map(escapeCsvValue).join(","))
+    ].join("\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(`\uFEFF${csv}`);
 }
 
 async function contarRegistrosCliente(client, dni) {
@@ -442,10 +499,10 @@ app.post("/reservar", requireAdmin, async (req, res) => {
     pack = Number(pack);
 
     if (validator.isEmpty(nombre)) return res.send("Nombre obligatorio");
-    if (!esTextoNumerico(dni)) return res.send("DNI inválido");
+    if (!esTextoNumerico(dni)) return res.send("DNI invÃ¡lido");
     if (!esTextoNumerico(telefono)) return res.send("Teléfono inválido");
-    if (![4, 8, 12, 16].includes(pack)) return res.send("Pack inválido");
-    if (clases.length !== pack) return res.send("Cantidad de clases inválida para el pack seleccionado");
+    if (![4, 8, 12, 16].includes(pack)) return res.send("Pack invÃ¡lido");
+    if (clases.length !== pack) return res.send("Cantidad de clases invÃ¡lida para el pack seleccionado");
 
     const fechas = new Set();
     for (const c of clases) {
@@ -458,7 +515,7 @@ app.post("/reservar", requireAdmin, async (req, res) => {
         if (error) return res.send(error);
 
         if (fechas.has(clase.dia)) {
-            return res.send("No podés reservar dos clases el mismo día");
+            return res.send("No podÃ©s reservar dos clases el mismo dÃ­a");
         }
         fechas.add(clase.dia);
     }
@@ -668,8 +725,8 @@ app.post("/editar-cliente", requireAdmin, async (req, res) => {
     return res.status(400).send("Datos incompletos");
   }
 
-  if (!esTextoNumerico(dniActual)) return res.status(400).send("DNI actual inválido");
-  if (!esTextoNumerico(nuevoDni)) return res.status(400).send("DNI inválido");
+  if (!esTextoNumerico(dniActual)) return res.status(400).send("DNI actual invÃ¡lido");
+  if (!esTextoNumerico(nuevoDni)) return res.status(400).send("DNI invÃ¡lido");
   if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
 
   const client = await pool.connect();
@@ -746,7 +803,7 @@ app.post("/lista-espera", requireAdmin, async (req, res) => {
     return res.status(400).send("Datos incompletos");
   }
 
-  if (!esTextoNumerico(dni)) return res.status(400).send("DNI inválido");
+  if (!esTextoNumerico(dni)) return res.status(400).send("DNI invÃ¡lido");
   if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
 
   const errorClase = validarClase({ dia, hora });
@@ -759,7 +816,7 @@ app.post("/lista-espera", requireAdmin, async (req, res) => {
     );
 
     if (existente.rowCount > 0) {
-      return res.status(400).send("Ese cliente ya está en lista de espera para ese horario");
+      return res.status(400).send("Ese cliente ya estÃ¡ en lista de espera para ese horario");
     }
 
     await pool.query(
@@ -840,6 +897,118 @@ app.get("/pagos", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/export/clientes", requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT nombre, telefono, dni
+      FROM (
+        SELECT nombre, telefono, dni FROM reservas
+        UNION ALL
+        SELECT nombre, telefono, dni FROM ciclos_pago
+        UNION ALL
+        SELECT nombre, telefono, dni FROM lista_espera
+        UNION ALL
+        SELECT nombre, telefono, dni FROM pagos
+      ) clientes
+      ORDER BY nombre ASC, dni ASC
+    `);
+
+    return enviarCsv(
+      res,
+      "clientes.csv",
+      ["nombre", "telefono", "dni"],
+      result.rows.map((row) => [row.nombre, row.telefono, row.dni])
+    );
+  } catch (err) {
+    console.error("/export/clientes error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
+app.get("/export/reservas", requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, nombre, telefono, dni, dia, hora, pack, asistida FROM reservas ORDER BY dia ASC, hora ASC, nombre ASC"
+    );
+
+    return enviarCsv(
+      res,
+      "reservas.csv",
+      ["id", "nombre", "telefono", "dni", "dia", "hora", "pack", "asistida"],
+      result.rows.map((row) => [row.id, row.nombre, row.telefono, row.dni, row.dia, row.hora, row.pack, row.asistida])
+    );
+  } catch (err) {
+    console.error("/export/reservas error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
+app.get("/export/pagos", requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        p.id,
+        p.nombre,
+        p.telefono,
+        p.dni,
+        p.fecha,
+        p.monto,
+        p.forma_pago,
+        c.monto_total,
+        c.monto_pagado,
+        c.saldo_pendiente,
+        c.estado,
+        c.periodo_label,
+        c.pack_referencia
+      FROM pagos p
+      INNER JOIN ciclos_pago c ON c.id = p.ciclo_id
+      ORDER BY p.fecha DESC, p.id DESC
+    `);
+
+    return enviarCsv(
+      res,
+      "pagos.csv",
+      ["id", "nombre", "telefono", "dni", "fecha", "monto", "forma_pago", "monto_total", "monto_pagado", "saldo_pendiente", "estado", "periodo_label", "pack_referencia"],
+      result.rows.map((row) => [
+        row.id,
+        row.nombre,
+        row.telefono,
+        row.dni,
+        row.fecha,
+        row.monto,
+        row.forma_pago,
+        row.monto_total,
+        row.monto_pagado,
+        row.saldo_pendiente,
+        row.estado,
+        row.periodo_label,
+        row.pack_referencia
+      ])
+    );
+  } catch (err) {
+    console.error("/export/pagos error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
+app.get("/export/lista-espera", requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, nombre, telefono, dni, dia, hora, created_at FROM lista_espera ORDER BY dia ASC, hora ASC, created_at ASC"
+    );
+
+    return enviarCsv(
+      res,
+      "lista-espera.csv",
+      ["id", "nombre", "telefono", "dni", "dia", "hora", "created_at"],
+      result.rows.map((row) => [row.id, row.nombre, row.telefono, row.dni, row.dia, row.hora, row.created_at])
+    );
+  } catch (err) {
+    console.error("/export/lista-espera error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
 app.post("/registrar-pago", requireAdmin, async (req, res) => {
   let { nombre, telefono, dni, monto, montoTotal, fecha, formaPago, tipoPago } = req.body;
 
@@ -855,12 +1024,12 @@ app.post("/registrar-pago", requireAdmin, async (req, res) => {
   }
 
   if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
-  if (!esTextoNumerico(dni)) return res.status(400).send("DNI inválido");
+  if (!esTextoNumerico(dni)) return res.status(400).send("DNI invÃ¡lido");
   if (!esFechaValida(fecha)) return res.status(400).send("Fecha inválida");
   if (!["completo", "parcial"].includes(tipoPago)) {
-    return res.status(400).send("Tipo de pago inválido");
+    return res.status(400).send("Tipo de pago invÃ¡lido");
   }
-  if (!esMontoValido(monto)) return res.status(400).send("Monto inválido");
+  if (!esMontoValido(monto)) return res.status(400).send("Monto invÃ¡lido");
 
   monto = parsearMonto(monto);
   montoTotal = esMontoValido(montoTotal) ? parsearMonto(montoTotal) : 0;
@@ -900,7 +1069,7 @@ app.post("/registrar-pago", requireAdmin, async (req, res) => {
     } else {
       if (!esMontoValido(montoTotal)) {
         await client.query("ROLLBACK");
-        return res.status(400).send("Monto total del pack inválido");
+        return res.status(400).send("Monto total del pack invÃ¡lido");
       }
 
       const saldoPendiente = Math.max(montoTotal - monto, 0);
@@ -948,7 +1117,7 @@ app.post("/editar-pago", requireAdmin, async (req, res) => {
   if (!id || !fecha || !formaPago) {
     return res.status(400).send("Datos incompletos");
   }
-  if (!esMontoValido(monto)) return res.status(400).send("Monto inválido");
+  if (!esMontoValido(monto)) return res.status(400).send("Monto invÃ¡lido");
   if (!esFechaValida(fecha)) return res.status(400).send("Fecha inválida");
 
   monto = parsearMonto(monto);
@@ -1038,5 +1207,7 @@ app.post("/eliminar-pago", requireAdmin, async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-    console.log("Servidor funcionando seguro 🚀");
+    console.log("Servidor funcionando seguro ðŸš€");
 });
+
+

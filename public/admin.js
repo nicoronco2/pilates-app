@@ -166,7 +166,7 @@ function obtenerEstadoPack(restantes) {
   if (numeroRestantes <= 4) {
     return {
       key: "avisar",
-      texto: "Conviene avisar renovación",
+      texto: "Conviene avisar renovacion",
       clase: "bg-warning-subtle text-warning-emphasis"
     };
   }
@@ -250,7 +250,7 @@ function obtenerClientesProcesados() {
       const cli = lista[0];
       const restantes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
       const recordatorio = obtenerEstadoPack(restantes);
-      const renovación = obtenerEstadoRenovacion(lista);
+      const renovacion = obtenerEstadoRenovacion(lista);
 
       return {
         dni,
@@ -258,7 +258,7 @@ function obtenerClientesProcesados() {
         cli,
         restantes,
         recordatorio,
-        renovación
+        renovacion
       };
     });
 }
@@ -348,7 +348,7 @@ function renderizarMetricasAdmin() {
     .filter((reserva) => reserva.dia === hoy);
   const pendientesHoy = clasesHoy.filter((reserva) => reserva.asistida == 0).length;
   const packsPorVencer = clientes.filter(({ restantes }) => restantes > 0 && restantes <= UMBRAL_PACK_POR_VENCER).length;
-  const cobrosPendientes = clientes.filter(({ renovación }) => Boolean(renovación)).length;
+  const cobrosPendientes = clientes.filter(({ renovacion }) => Boolean(renovacion)).length;
 
   const ocupacionPorHorario = {};
   Object.values(clientesGlobal).flat().forEach((reserva) => {
@@ -386,15 +386,15 @@ function renderizarMetricasAdmin() {
     {
       label: "Packs por vencer",
       value: packsPorVencer,
-      help: packsPorVencer > 0 ? "Clientes con 1 o 2 clases restantes." : "No hay renovaciónes urgentes."
+      help: packsPorVencer > 0 ? "Clientes con 1 o 2 clases restantes." : "No hay renovaciones urgentes."
     },
     {
       label: "Cobros por renovar",
       value: cobrosPendientes,
-      help: cobrosPendientes > 0 ? "Clientes que ya terminaron el pack y pueden renovar." : "No hay cobros de renovación pendientes."
+      help: cobrosPendientes > 0 ? "Clientes que ya terminaron el pack y pueden renovar." : "No hay cobros de renovacion pendientes."
     },
     {
-      label: "Horario mas cargado",
+      label: "Horario más cargado",
       value: metricaHorario.value,
       help: metricaHorario.ayuda
     }
@@ -591,7 +591,7 @@ function renderizarBusquedasPago() {
     .slice(0, 6);
 
   if (!coincidencias.length) {
-    contenedor.innerHTML = `<div class="waitlist-empty">No se encontraron clientes con esa bÃºsqueda.</div>`;
+    contenedor.innerHTML = `<div class="waitlist-empty">No se encontraron clientes con esa búsqueda.</div>`;
     return;
   }
 
@@ -739,7 +739,7 @@ function renderizarResumenPagos() {
     );
 
   if (!clientes.length) {
-    contenedor.innerHTML = `<div class="waitlist-empty">No hay clientes que coincidan con esa bÃºsqueda.</div>`;
+    contenedor.innerHTML = `<div class="waitlist-empty">No hay clientes que coincidan con esa búsqueda.</div>`;
     return;
   }
 
@@ -1061,9 +1061,9 @@ function renderizarListaEspera() {
             <th>Nombre</th>
             <th>DNI</th>
             <th>Teléfono</th>
-            <th>DÃ­a</th>
+            <th>Día</th>
             <th>Hora</th>
-            <th>AcciÃ³n</th>
+            <th>Acción</th>
           </tr>
         </thead>
         <tbody>
@@ -1134,7 +1134,7 @@ function pintarClientes() {
     return;
   }
 
-  clientesFiltrados.forEach(({ dni, lista, cli, restantes, recordatorio, renovación }) => {
+  clientesFiltrados.forEach(({ dni, lista, cli, restantes, recordatorio, renovacion }) => {
     const pago = obtenerEstadoPagoCliente(dni, cli);
     tabla.innerHTML += `
       <tr>
@@ -1146,7 +1146,7 @@ function pintarClientes() {
         <td>${restantes}</td>
         <td>
           <span class="badge rounded-pill ${recordatorio.clase}">${recordatorio.texto}</span>
-          ${renovación ? `<span class="renew-note">${escapeHtml(renovación.texto)}</span>` : ""}
+          ${renovacion ? `<span class="renew-note">${escapeHtml(renovacion.texto)}</span>` : ""}
         </td>
         <td>
           <span class="badge rounded-pill ${pago.clase}">${pago.texto}</span>
@@ -1221,7 +1221,7 @@ async function cargarCalendario() {
   const tabla = document.getElementById("tablaCalendario");
   tabla.innerHTML = `
     <tr>
-      <th>Hora</th><th>Lunes</th><th>Martes</th><th>MiÃ©rcoles</th><th>Jueves</th><th>Viernes</th>
+      <th>Hora</th><th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th><th>Viernes</th>
     </tr>`;
 
   horarios.forEach((hora) => {
@@ -1242,7 +1242,7 @@ async function cargarCalendario() {
 
 async function confirmarAsistencia() {
   const dni = document.getElementById("dniInput").value.trim();
-  if (!dni) return alert("IngresÃ¡ DNI");
+  if (!dni) return alert("Ingresá DNI");
   if (!horaAsistenciaHoy) return alert("No hay clase pendiente para hoy");
 
   const res = await fetch("/asistencia", {
@@ -1331,7 +1331,7 @@ function mostrarClases(dni) {
   const hoy = obtenerFechaHoy();
   const proximaClase = pendientes.find((reserva) => `${reserva.dia}|${reserva.hora}` >= `${hoy}|00:00`) || pendientes[0] || null;
   const estadoPack = obtenerEstadoPack(pendientes.length);
-  const renovación = obtenerEstadoRenovacion(clasesOrdenadas);
+  const renovacion = obtenerEstadoRenovacion(clasesOrdenadas);
 
   panel.innerHTML = `
     <div class="client-history-card">
@@ -1344,7 +1344,7 @@ function mostrarClases(dni) {
           ${estadoPack.texto}
         </span>
       </div>
-      ${renovación ? `<div class="alert alert-warning py-2 mb-3">${escapeHtml(renovación.texto)}. La renovación debería quedar confirmada antes de la próxima clase sugerida.</div>` : ""}
+      ${renovacion ? `<div class="alert alert-warning py-2 mb-3">${escapeHtml(renovacion.texto)}. La renovacion debería quedar confirmada antes de la próxima clase sugerida.</div>` : ""}
 
       <div class="history-metrics mb-3">
         <div class="history-metric">
@@ -1506,7 +1506,7 @@ function renovarCliente(dni) {
     telefono: cliente.telefono,
     dni: cliente.dni,
     pack: nuevoPack.trim(),
-    modo: "renovación"
+    modo: "renovacion"
   });
 
   if (nuevoPack.trim() === packActual) {
@@ -1765,4 +1765,5 @@ document.addEventListener("click", (event) => {
     reprogramarClase(button.dataset.id);
   }
 });
+
 

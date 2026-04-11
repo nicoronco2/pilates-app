@@ -38,7 +38,7 @@ app.use(helmet({
   }
 }));
 
-// quitÃ¡ o comenta esta lÃ­nea para no reescribir CSP a â€œsin CSPâ€
+// quita o comenta esta línea para no reescribir CSP a "sin CSP"
  // app.use(helmet({ contentSecurityPolicy: false }));
 
 /* =====================================================
@@ -104,7 +104,7 @@ pool.connect()
     })
     .catch(err => {
         console.error("Error conectando PostgreSQL:", err.message);
-        process.exit(1); // mejor fallar rapido en deploy malo
+        process.exit(1); // mejor fallar rápido en deploy malo
     });
 
 // Crear tabla si no existe
@@ -499,10 +499,10 @@ app.post("/reservar", requireAdmin, async (req, res) => {
     pack = Number(pack);
 
     if (validator.isEmpty(nombre)) return res.send("Nombre obligatorio");
-    if (!esTextoNumerico(dni)) return res.send("DNI invÃ¡lido");
+    if (!esTextoNumerico(dni)) return res.send("DNI inválido");
     if (!esTextoNumerico(telefono)) return res.send("Teléfono inválido");
-    if (![4, 8, 12, 16].includes(pack)) return res.send("Pack invÃ¡lido");
-    if (clases.length !== pack) return res.send("Cantidad de clases invÃ¡lida para el pack seleccionado");
+    if (![4, 8, 12, 16].includes(pack)) return res.send("Pack inválido");
+    if (clases.length !== pack) return res.send("Cantidad de clases inválida para el pack seleccionado");
 
     const fechas = new Set();
     for (const c of clases) {
@@ -515,7 +515,7 @@ app.post("/reservar", requireAdmin, async (req, res) => {
         if (error) return res.send(error);
 
         if (fechas.has(clase.dia)) {
-            return res.send("No podÃ©s reservar dos clases el mismo dÃ­a");
+            return res.send("No podés reservar dos clases el mismo día");
         }
         fechas.add(clase.dia);
     }
@@ -725,8 +725,8 @@ app.post("/editar-cliente", requireAdmin, async (req, res) => {
     return res.status(400).send("Datos incompletos");
   }
 
-  if (!esTextoNumerico(dniActual)) return res.status(400).send("DNI actual invÃ¡lido");
-  if (!esTextoNumerico(nuevoDni)) return res.status(400).send("DNI invÃ¡lido");
+  if (!esTextoNumerico(dniActual)) return res.status(400).send("DNI actual inválido");
+  if (!esTextoNumerico(nuevoDni)) return res.status(400).send("DNI inválido");
   if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
 
   const client = await pool.connect();
@@ -803,7 +803,7 @@ app.post("/lista-espera", requireAdmin, async (req, res) => {
     return res.status(400).send("Datos incompletos");
   }
 
-  if (!esTextoNumerico(dni)) return res.status(400).send("DNI invÃ¡lido");
+  if (!esTextoNumerico(dni)) return res.status(400).send("DNI inválido");
   if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
 
   const errorClase = validarClase({ dia, hora });
@@ -816,7 +816,7 @@ app.post("/lista-espera", requireAdmin, async (req, res) => {
     );
 
     if (existente.rowCount > 0) {
-      return res.status(400).send("Ese cliente ya estÃ¡ en lista de espera para ese horario");
+      return res.status(400).send("Ese cliente ya está en lista de espera para ese horario");
     }
 
     await pool.query(
@@ -1024,12 +1024,12 @@ app.post("/registrar-pago", requireAdmin, async (req, res) => {
   }
 
   if (!esTextoNumerico(telefono)) return res.status(400).send("Teléfono inválido");
-  if (!esTextoNumerico(dni)) return res.status(400).send("DNI invÃ¡lido");
+  if (!esTextoNumerico(dni)) return res.status(400).send("DNI inválido");
   if (!esFechaValida(fecha)) return res.status(400).send("Fecha inválida");
   if (!["completo", "parcial"].includes(tipoPago)) {
-    return res.status(400).send("Tipo de pago invÃ¡lido");
+    return res.status(400).send("Tipo de pago inválido");
   }
-  if (!esMontoValido(monto)) return res.status(400).send("Monto invÃ¡lido");
+  if (!esMontoValido(monto)) return res.status(400).send("Monto inválido");
 
   monto = parsearMonto(monto);
   montoTotal = esMontoValido(montoTotal) ? parsearMonto(montoTotal) : 0;
@@ -1069,7 +1069,7 @@ app.post("/registrar-pago", requireAdmin, async (req, res) => {
     } else {
       if (!esMontoValido(montoTotal)) {
         await client.query("ROLLBACK");
-        return res.status(400).send("Monto total del pack invÃ¡lido");
+        return res.status(400).send("Monto total del pack inválido");
       }
 
       const saldoPendiente = Math.max(montoTotal - monto, 0);
@@ -1117,7 +1117,7 @@ app.post("/editar-pago", requireAdmin, async (req, res) => {
   if (!id || !fecha || !formaPago) {
     return res.status(400).send("Datos incompletos");
   }
-  if (!esMontoValido(monto)) return res.status(400).send("Monto invÃ¡lido");
+  if (!esMontoValido(monto)) return res.status(400).send("Monto inválido");
   if (!esFechaValida(fecha)) return res.status(400).send("Fecha inválida");
 
   monto = parsearMonto(monto);
@@ -1207,7 +1207,8 @@ app.post("/eliminar-pago", requireAdmin, async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-    console.log("Servidor funcionando seguro ðŸš€");
+    console.log("Servidor funcionando seguro");
 });
+
 
 

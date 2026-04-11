@@ -13,10 +13,16 @@
     <style>
         .top-actions{
             flex-wrap:wrap;
+            justify-content:flex-end;
+            align-items:flex-start;
+        }
+
+        .top-actions .btn{
+            min-width:160px;
         }
 
         #themeToggleBtn{
-            min-width:140px;
+            min-width:160px;
         }
 
         [data-bs-theme="dark"] body{
@@ -348,6 +354,15 @@
             h4{ font-size:18px; }
             table{ font-size:13px; }
             .btn{ font-size:13px; }
+
+            .top-actions{
+                width:100%;
+                justify-content:flex-end;
+            }
+
+            .top-actions .btn{
+                width:160px;
+            }
         }
     </style>
 

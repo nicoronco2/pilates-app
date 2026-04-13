@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
@@ -15,6 +15,9 @@ const HORARIOS_VALIDOS = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", 
 ===================================================== */
 
 const intentosLogin = {};
+const SESSION_IDLE_TIMEOUT_MS = 1000 * 60 * 20;
+const SESSION_ABSOLUTE_TIMEOUT_MS = 1000 * 60 * 60 * 8;
+const RUTAS_PROTEGIDAS = new Set(["/admin", "/admin.html", "/reservar", "/reservar.html"]);
 
 /* =====================================================
    SEGURIDAD BASE
@@ -48,9 +51,6 @@ app.use(helmet({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// servir /public
-app.use(express.static(path.join(__dirname, "public")));
-
 const isProduction = process.env.NODE_ENV === "production";
 const sessionSecret = process.env.SESSION_SECRET;
 const databaseUrl = process.env.DATABASE_URL;
@@ -79,12 +79,13 @@ app.use(session({
     secret: sessionSecret || "secreto123",
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     proxy: true,
     cookie: {
         httpOnly: true,
         secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
-        maxAge: 1000 * 60 * 60
+        sameSite: "strict",
+        maxAge: SESSION_IDLE_TIMEOUT_MS
     }
 }));
 
@@ -96,89 +97,72 @@ const pool = new Pool({
     connectionString: databaseUrl
 });
 
-// verificar y loguear
-pool.connect()
-    .then(client => {
-        client.release();
-        console.log("PostgreSQL conectado");
-    })
-    .catch(err => {
-        console.error("Error conectando PostgreSQL:", err.message);
-        process.exit(1); // mejor fallar rápido en deploy malo
-    });
+async function verificarConexionPostgres() {
+    const client = await pool.connect();
+    client.release();
+    console.log("PostgreSQL conectado");
+}
 
-// Crear tabla si no existe
-pool.query(`
-CREATE TABLE IF NOT EXISTS reservas (
-    id SERIAL PRIMARY KEY,
-    nombre TEXT,
-    telefono TEXT,
-    dni TEXT,
-    dia TEXT,
-    hora TEXT,
-    pack INTEGER,
-    asistida INTEGER DEFAULT 0
-)
-`).catch(err => {
-    console.error("Error creando tabla reservas:", err.message);
-});
+async function inicializarBaseDeDatos() {
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS reservas (
+        id SERIAL PRIMARY KEY,
+        nombre TEXT,
+        telefono TEXT,
+        dni TEXT,
+        dia TEXT,
+        hora TEXT,
+        pack INTEGER,
+        asistida INTEGER DEFAULT 0
+    )
+    `);
 
-pool.query(`
-CREATE TABLE IF NOT EXISTS lista_espera (
-    id SERIAL PRIMARY KEY,
-    nombre TEXT NOT NULL,
-    telefono TEXT NOT NULL,
-    dni TEXT NOT NULL,
-    dia TEXT NOT NULL,
-    hora TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-`).catch(err => {
-    console.error("Error creando tabla lista_espera:", err.message);
-});
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS lista_espera (
+        id SERIAL PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        telefono TEXT NOT NULL,
+        dni TEXT NOT NULL,
+        dia TEXT NOT NULL,
+        hora TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    `);
 
-pool.query(`
-CREATE TABLE IF NOT EXISTS ciclos_pago (
-    id SERIAL PRIMARY KEY,
-    nombre TEXT NOT NULL,
-    telefono TEXT NOT NULL,
-    dni TEXT NOT NULL,
-    monto_total NUMERIC(12,2) NOT NULL,
-    monto_pagado NUMERIC(12,2) DEFAULT 0,
-    saldo_pendiente NUMERIC(12,2) DEFAULT 0,
-    estado TEXT NOT NULL DEFAULT 'pendiente',
-    fecha_inicio TEXT NOT NULL,
-    fecha_ultimo_pago TEXT NOT NULL,
-    periodo_label TEXT,
-    pack_referencia INTEGER
-)
-`).catch(err => {
-    console.error("Error creando tabla ciclos_pago:", err.message);
-});
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS ciclos_pago (
+        id SERIAL PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        telefono TEXT NOT NULL,
+        dni TEXT NOT NULL,
+        monto_total NUMERIC(12,2) NOT NULL,
+        monto_pagado NUMERIC(12,2) DEFAULT 0,
+        saldo_pendiente NUMERIC(12,2) DEFAULT 0,
+        estado TEXT NOT NULL DEFAULT 'pendiente',
+        fecha_inicio TEXT NOT NULL,
+        fecha_ultimo_pago TEXT NOT NULL,
+        periodo_label TEXT,
+        pack_referencia INTEGER
+    )
+    `);
 
-pool.query("ALTER TABLE ciclos_pago ADD COLUMN IF NOT EXISTS periodo_label TEXT").catch(err => {
-    console.error("Error agregando periodo_label a ciclos_pago:", err.message);
-});
+    await pool.query("ALTER TABLE ciclos_pago ADD COLUMN IF NOT EXISTS periodo_label TEXT");
+    await pool.query("ALTER TABLE ciclos_pago ADD COLUMN IF NOT EXISTS pack_referencia INTEGER");
 
-pool.query("ALTER TABLE ciclos_pago ADD COLUMN IF NOT EXISTS pack_referencia INTEGER").catch(err => {
-    console.error("Error agregando pack_referencia a ciclos_pago:", err.message);
-});
-
-pool.query(`
-CREATE TABLE IF NOT EXISTS pagos (
-    id SERIAL PRIMARY KEY,
-    ciclo_id INTEGER NOT NULL REFERENCES ciclos_pago(id) ON DELETE CASCADE,
-    nombre TEXT NOT NULL,
-    telefono TEXT NOT NULL,
-    dni TEXT NOT NULL,
-    monto NUMERIC(12,2) NOT NULL,
-    fecha TEXT NOT NULL,
-    forma_pago TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-`).catch(err => {
-    console.error("Error creando tabla pagos:", err.message);
-});
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS pagos (
+        id SERIAL PRIMARY KEY,
+        ciclo_id INTEGER NOT NULL REFERENCES ciclos_pago(id) ON DELETE CASCADE,
+        nombre TEXT NOT NULL,
+        telefono TEXT NOT NULL,
+        dni TEXT NOT NULL,
+        monto NUMERIC(12,2) NOT NULL,
+        fecha TEXT NOT NULL,
+        forma_pago TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    `);
+}
 
 /* =====================================================
    USUARIOS ADMIN (HASH)
@@ -608,10 +592,11 @@ app.get("/login", (req, res) => {
 
 app.post("/login", async (req, res) => {
 
-    let { usuario, password } = req.body;
+    let { usuario, password, returnTo } = req.body;
 
     usuario = validator.escape(usuario || "").trim();
     password = validator.escape(password || "").trim();
+    returnTo = String(returnTo || "").trim();
 
     if (validator.isEmpty(usuario) || validator.isEmpty(password)) {
         return res.send("Datos incompletos");
@@ -630,8 +615,20 @@ app.post("/login", async (req, res) => {
 
         if (coincide) {
             delete intentosLogin[ip];
-            req.session.admin = true;
-            return res.redirect("/admin");
+            const destinoSeguro = obtenerDestinoSeguro(returnTo);
+
+            return req.session.regenerate((error) => {
+                if (error) {
+                    console.error("Error regenerando sesión:", error);
+                    return res.status(500).send("No se pudo iniciar sesión");
+                }
+
+                const ahora = Date.now();
+                req.session.admin = true;
+                req.session.loginAt = ahora;
+                req.session.lastActivityAt = ahora;
+                return res.redirect(destinoSeguro);
+            });
         }
     }
 
@@ -657,12 +654,68 @@ app.post("/login", async (req, res) => {
 ===================================================== */
 
 function requireAdmin(req, res, next) {
-  if (req.session && req.session.admin) return next();
-  if (req.headers.accept && req.headers.accept.indexOf("application/json") !== -1) {
-    return res.status(401).json({ error: "No autorizado" });
+  if (req.session && req.session.admin) {
+    const ahora = Date.now();
+    const loginAt = Number(req.session.loginAt || 0);
+    const lastActivityAt = Number(req.session.lastActivityAt || loginAt || 0);
+
+    const expiroPorInactividad = !lastActivityAt || ahora - lastActivityAt > SESSION_IDLE_TIMEOUT_MS;
+    const expiroPorTiempoTotal = !loginAt || ahora - loginAt > SESSION_ABSOLUTE_TIMEOUT_MS;
+
+    if (!expiroPorInactividad && !expiroPorTiempoTotal) {
+      req.session.lastActivityAt = ahora;
+      return next();
+    }
+
+    limpiarSesionAdmin(req, res);
   }
-  return res.redirect("/login");
+  const esperaRespuestaDirecta =
+    req.method !== "GET" ||
+    (req.headers.accept && req.headers.accept.indexOf("application/json") !== -1) ||
+    (req.headers["content-type"] && req.headers["content-type"].indexOf("application/json") !== -1);
+
+  if (esperaRespuestaDirecta) {
+    return res.status(401).send("Tu sesión expiró. Volvé a iniciar sesión.");
+  }
+  return res.redirect(`/login?returnTo=${encodeURIComponent(req.originalUrl || "/admin")}`);
 }
+
+function obtenerDestinoSeguro(returnTo) {
+    const destino = String(returnTo || "").trim();
+    if (
+        destino.startsWith("/") &&
+        !destino.startsWith("//") &&
+        !destino.includes("http://") &&
+        !destino.includes("https://")
+    ) {
+        return destino;
+    }
+    return "/admin";
+}
+
+function limpiarSesionAdmin(req, res) {
+    if (!req.session) return;
+
+    req.session.admin = false;
+    delete req.session.admin;
+    delete req.session.loginAt;
+    delete req.session.lastActivityAt;
+
+    res.clearCookie("pilates-session");
+}
+
+app.use((req, res, next) => {
+  if (RUTAS_PROTEGIDAS.has(req.path)) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    return requireAdmin(req, res, next);
+  }
+  next();
+});
+
+// servir /public
+app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/admin", requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, "private/admin.html"));
@@ -672,11 +725,16 @@ app.get("/admin.html", requireAdmin, (req, res) => {
   res.redirect("/admin");
 });
 
+app.get("/reservar", requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, "public/reservar.html"));
+});
+
 /* =====================================================
    LOGOUT
 ===================================================== */
 
 app.get("/logout", (req, res) => {
+    res.clearCookie("pilates-session");
     req.session.destroy(() => res.redirect("/login"));
 });
 
@@ -753,7 +811,7 @@ app.post("/reservar", requireAdmin, async (req, res) => {
         }
 
         await client.query("COMMIT");
-        return res.send("Reserva guardada correctamente");
+        return res.type("text/plain").send("Reserva guardada correctamente");
     } catch (err) {
         await client.query("ROLLBACK");
         console.error("/reservar error:", err);
@@ -1421,9 +1479,21 @@ app.post("/eliminar-pago", requireAdmin, async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log("Servidor funcionando seguro");
-});
+async function iniciarServidor() {
+    try {
+        await verificarConexionPostgres();
+        await inicializarBaseDeDatos();
+
+        app.listen(PORT, "0.0.0.0", () => {
+            console.log("Servidor funcionando seguro");
+        });
+    } catch (err) {
+        console.error("Error iniciando servidor:", err.message);
+        process.exit(1);
+    }
+}
+
+iniciarServidor();
 
 
 

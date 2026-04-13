@@ -32,7 +32,7 @@ function generarClases() {
 
     const packValue = document.getElementById("pack").value;
 
-    // 🔥 FIX: si no hay pack seleccionado, no hace nada
+    // ðŸ”¥ FIX: si no hay pack seleccionado, no hace nada
     if (!packValue) return;
 
     const pack = parseInt(packValue);
@@ -68,9 +68,9 @@ function generarClases() {
 
             if (!this.value) return;
 
-            /* NO repetir día */
+            /* NO repetir dÃ­a */
             if (fechaRepetida(this.value)) {
-                alert("No podés reservar dos clases el mismo día");
+                alert("No podÃ©s reservar dos clases el mismo dÃ­a");
                 this.value = "";
                 return;
             }
@@ -80,7 +80,7 @@ function generarClases() {
             const dia = fecha.getDay();
 
             if (dia === 0 || dia === 6) {
-                alert("Los sábados y domingos no hay clases");
+                alert("Los sÃ¡bados y domingos no hay clases");
                 this.value = "";
                 return;
             }
@@ -97,7 +97,7 @@ function generarClases() {
 }
 
 /* =========================================================
-   BLOQUEAR FECHAS (hoy hasta +30 días)
+   BLOQUEAR FECHAS (hoy hasta +30 dÃ­as)
 ========================================================= */
 
 function bloquearFechas() {
@@ -179,7 +179,7 @@ async function cambiarHorarios(inputFecha) {
             if (!ocupado) {
                 selectHora.innerHTML += `<option value="${h}">${h}</option>`;
             } else {
-                // 🔥 OPCIONAL: mostrar ocupado deshabilitado
+                // ðŸ”¥ OPCIONAL: mostrar ocupado deshabilitado
                 selectHora.innerHTML += `<option disabled>${h} (completo)</option>`;
             }
         });
@@ -213,7 +213,7 @@ async function aplicarClasesPrefill(clases) {
     if (prefillNotice && clasesNoDisponibles > 0) {
         prefillNotice.classList.remove("d-none", "alert-info");
         prefillNotice.classList.add("alert-warning");
-        prefillNotice.textContent = "Algunas clases sugeridas ya no están disponibles y vas a tener que elegir otro horario.";
+        prefillNotice.textContent = "Algunas clases sugeridas ya no estÃ¡n disponibles y vas a tener que elegir otro horario.";
     }
 }
 
@@ -233,7 +233,7 @@ function aplicarPrefillDesdeURL() {
 
     if (prefillNotice && modo === "renovacion") {
         prefillNotice.classList.remove("d-none");
-        prefillNotice.textContent = "Renovación en curso: revisá el pack y confirmá las fechas antes de guardar.";
+        prefillNotice.textContent = "RenovaciÃ³n en curso: revisÃ¡ el pack y confirmÃ¡ las fechas antes de guardar.";
     }
 
     if (!pack) return;
@@ -302,7 +302,7 @@ document.getElementById("formReserva").addEventListener("submit", async function
     for (let i = 0; i < fechas.length; i++) {
 
         if (!fechas[i].value || !horas[i].value) {
-            alert("Tenés que completar todas las clases");
+            alert("TenÃ©s que completar todas las clases");
             return;
         }
 
@@ -327,15 +327,31 @@ document.getElementById("formReserva").addEventListener("submit", async function
 
     const res = await fetch("/reservar", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "text/plain, application/json"
+        },
         body: JSON.stringify({ nombre, telefono, dni, pack, clases })
     });
 
-    const mensaje = await res.text();
+    const contentType = res.headers.get("content-type") || "";
+    let mensaje = await res.text();
+    const parecePantallaLogin =
+        contentType.includes("text/html") &&
+        /<!doctype html|<html/i.test(mensaje);
+
+    if (
+        res.status === 401 ||
+        res.redirected ||
+        res.url.includes("/login") ||
+        parecePantallaLogin
+    ) {
+        mensaje = "Tu sesión expiró. Volvé a iniciar sesión para registrar la reserva.";
+    }
 
     alert(mensaje);
 
-    if (mensaje === "Reserva guardada correctamente") {
+    if (res.ok && mensaje === "Reserva guardada correctamente") {
         document.getElementById("formReserva").reset();
         document.getElementById("clasesContainer").innerHTML = "";
     }

@@ -1516,7 +1516,7 @@ function renovarCliente(dni) {
     }
   }
 
-  window.location.href = `/reservar.html?${params.toString()}`;
+  window.location.href = `/reservar?${params.toString()}`;
 }
 
 async function reprogramarClase(id) {

@@ -34,6 +34,7 @@ body{
         <form method="POST" action="/login">
 
             <input type="hidden" name="returnTo" id="returnTo">
+            <input type="hidden" name="_csrf" id="csrfToken">
 
             <div class="mb-3">
                 <label class="form-label">Usuario</label>
@@ -58,6 +59,15 @@ const params = new URLSearchParams(window.location.search);
 const returnTo = params.get("returnTo");
 if (returnTo) {
     document.getElementById("returnTo").value = returnTo;
+}
+
+const csrfCookie = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("pilates-csrf="))
+    ?.split("=")[1];
+
+if (csrfCookie) {
+    document.getElementById("csrfToken").value = decodeURIComponent(csrfCookie);
 }
 </script>
 

@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 require("dotenv").config();
 const validator = require("validator");
 const helmet = require("helmet");
@@ -18,6 +19,8 @@ const intentosLogin = {};
 const SESSION_IDLE_TIMEOUT_MS = 1000 * 60 * 20;
 const SESSION_ABSOLUTE_TIMEOUT_MS = 1000 * 60 * 60 * 8;
 const RUTAS_PROTEGIDAS = new Set(["/admin", "/admin.html", "/reservar", "/reservar.html"]);
+const CSRF_COOKIE_NAME = "pilates-csrf";
+const TWO_FACTOR_WINDOW_MS = 1000 * 60 * 10;
 
 /* =====================================================
    SEGURIDAD BASE
@@ -56,6 +59,72 @@ const sessionSecret = process.env.SESSION_SECRET;
 const databaseUrl = process.env.DATABASE_URL;
 const adminUsersEnv = process.env.ADMIN_USERS_JSON;
 
+const pool = new Pool({
+    connectionString: databaseUrl
+});
+
+class PostgresSessionStore extends session.Store {
+    constructor(poolInstance) {
+        super();
+        this.pool = poolInstance;
+    }
+
+    async limpiarExpiradas() {
+        if (Math.random() > 0.05) return;
+        await this.pool.query("DELETE FROM admin_sessions WHERE expire < NOW()");
+    }
+
+    get(sid, callback) {
+        this.pool.query(
+            "SELECT sess FROM admin_sessions WHERE sid = $1 AND expire >= NOW()",
+            [sid]
+        ).then(async (result) => {
+            await this.limpiarExpiradas().catch(() => {});
+            if (result.rowCount === 0) return callback(null, null);
+            return callback(null, result.rows[0].sess);
+        }).catch((error) => callback(error));
+    }
+
+    set(sid, sess, callback = () => {}) {
+        const expire = sess?.cookie?.expires
+            ? new Date(sess.cookie.expires)
+            : new Date(Date.now() + (sess?.cookie?.maxAge || SESSION_IDLE_TIMEOUT_MS));
+
+        this.pool.query(
+            `INSERT INTO admin_sessions (sid, sess, expire)
+             VALUES ($1, $2::jsonb, $3)
+             ON CONFLICT (sid)
+             DO UPDATE SET sess = EXCLUDED.sess, expire = EXCLUDED.expire`,
+            [sid, JSON.stringify(sess), expire]
+        ).then(async () => {
+            await this.limpiarExpiradas().catch(() => {});
+            callback();
+        }).catch((error) => callback(error));
+    }
+
+    destroy(sid, callback = () => {}) {
+        this.pool.query("DELETE FROM admin_sessions WHERE sid = $1", [sid])
+            .then(() => callback())
+            .catch((error) => callback(error));
+    }
+
+    touch(sid, sess, callback = () => {}) {
+        const expire = sess?.cookie?.expires
+            ? new Date(sess.cookie.expires)
+            : new Date(Date.now() + (sess?.cookie?.maxAge || SESSION_IDLE_TIMEOUT_MS));
+
+        this.pool.query(
+            "UPDATE admin_sessions SET expire = $1, sess = $2::jsonb WHERE sid = $3",
+            [expire, JSON.stringify(sess), sid]
+        ).then(async () => {
+            await this.limpiarExpiradas().catch(() => {});
+            callback();
+        }).catch((error) => callback(error));
+    }
+}
+
+const sessionStore = new PostgresSessionStore(pool);
+
 if (isProduction && !sessionSecret) {
     throw new Error("SESSION_SECRET es obligatorio en producción");
 }
@@ -77,6 +146,7 @@ app.set("trust proxy", 1);
 app.use(session({
     name: "pilates-session",
     secret: sessionSecret || "secreto123",
+    store: sessionStore,
     resave: false,
     saveUninitialized: false,
     rolling: true,
@@ -93,10 +163,6 @@ app.use(session({
    BASE DE DATOS (POSTGRESQL)
 ===================================================== */
 
-const pool = new Pool({
-    connectionString: databaseUrl
-});
-
 async function verificarConexionPostgres() {
     const client = await pool.connect();
     client.release();
@@ -104,6 +170,19 @@ async function verificarConexionPostgres() {
 }
 
 async function inicializarBaseDeDatos() {
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+        sid TEXT PRIMARY KEY,
+        sess JSONB NOT NULL,
+        expire TIMESTAMPTZ NOT NULL
+    )
+    `);
+
+    await pool.query(`
+    CREATE INDEX IF NOT EXISTS admin_sessions_expire_idx
+    ON admin_sessions (expire)
+    `);
+
     await pool.query(`
     CREATE TABLE IF NOT EXISTS reservas (
         id SERIAL PRIMARY KEY,
@@ -590,6 +669,13 @@ app.get("/login", (req, res) => {
     res.sendFile(path.join(__dirname, "public/login.html"));
 });
 
+app.get("/login-2fa", (req, res) => {
+    if (!req.session?.pendingTwoFactor?.user) {
+        return res.redirect("/login");
+    }
+    res.sendFile(path.join(__dirname, "public/login-2fa.html"));
+});
+
 app.post("/login", async (req, res) => {
 
     let { usuario, password, returnTo } = req.body;
@@ -624,9 +710,22 @@ app.post("/login", async (req, res) => {
                 }
 
                 const ahora = Date.now();
+                req.session.csrfToken = generarCsrfToken();
+
+                if (usuarioEncontrado.twoFactorSecret) {
+                    req.session.pendingTwoFactor = {
+                        user: usuarioEncontrado.user,
+                        returnTo: destinoSeguro,
+                        createdAt: ahora
+                    };
+                    asegurarCsrf(req, res);
+                    return res.redirect("/login-2fa");
+                }
+
                 req.session.admin = true;
                 req.session.loginAt = ahora;
                 req.session.lastActivityAt = ahora;
+                asegurarCsrf(req, res);
                 return res.redirect(destinoSeguro);
             });
         }
@@ -647,6 +746,38 @@ app.post("/login", async (req, res) => {
 
     const restantes = 5 - intentosLogin[ip].intentos;
     res.send(`Usuario o contraseña incorrectos. Intentos restantes: ${restantes}`);
+});
+
+app.post("/login-2fa", (req, res) => {
+    const pending = req.session?.pendingTwoFactor;
+    if (!pending?.user) {
+        return res.redirect("/login");
+    }
+
+    if (Date.now() - Number(pending.createdAt || 0) > TWO_FACTOR_WINDOW_MS) {
+        delete req.session.pendingTwoFactor;
+        return res.send("La verificación en dos pasos venció. Volvé a iniciar sesión.");
+    }
+
+    const codigo = String(req.body?.codigo || "").trim();
+    const usuario = usuarios.find((item) => item.user === pending.user);
+
+    if (!usuario?.twoFactorSecret) {
+        delete req.session.pendingTwoFactor;
+        return res.redirect("/login");
+    }
+
+    if (!validarCodigoTOTP(usuario.twoFactorSecret, codigo)) {
+        return res.send("Código de verificación inválido.");
+    }
+
+    const ahora = Date.now();
+    req.session.admin = true;
+    req.session.loginAt = ahora;
+    req.session.lastActivityAt = ahora;
+    delete req.session.pendingTwoFactor;
+    asegurarCsrf(req, res);
+    return res.redirect(obtenerDestinoSeguro(pending.returnTo));
 });
 
 /* =====================================================
@@ -700,9 +831,113 @@ function limpiarSesionAdmin(req, res) {
     delete req.session.admin;
     delete req.session.loginAt;
     delete req.session.lastActivityAt;
+    delete req.session.csrfToken;
+    delete req.session.pendingTwoFactor;
 
     res.clearCookie("pilates-session");
+    res.clearCookie(CSRF_COOKIE_NAME);
 }
+
+function generarCsrfToken() {
+    return crypto.randomBytes(32).toString("hex");
+}
+
+function asegurarCsrf(req, res) {
+    if (!req.session) return;
+
+    if (!req.session.csrfToken) {
+        req.session.csrfToken = generarCsrfToken();
+    }
+
+    res.cookie(CSRF_COOKIE_NAME, req.session.csrfToken, {
+        httpOnly: false,
+        secure: isProduction,
+        sameSite: "strict",
+        path: "/",
+        maxAge: SESSION_IDLE_TIMEOUT_MS
+    });
+}
+
+function validarCsrf(req, res, next) {
+    if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+        return next();
+    }
+
+    const tokenRecibido =
+        String(req.headers["x-csrf-token"] || "").trim() ||
+        String(req.body?._csrf || "").trim();
+
+    const tokenSesion = String(req.session?.csrfToken || "").trim();
+
+    if (!tokenRecibido || !tokenSesion || tokenRecibido !== tokenSesion) {
+        return res.status(403).send("Token de seguridad inválido");
+    }
+
+    return next();
+}
+
+function base32ABytes(secret) {
+    const alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    const limpio = String(secret || "").toUpperCase().replace(/=+$/g, "").replace(/[^A-Z2-7]/g, "");
+    let bits = "";
+
+    for (const char of limpio) {
+        const indice = alfabeto.indexOf(char);
+        if (indice === -1) continue;
+        bits += indice.toString(2).padStart(5, "0");
+    }
+
+    const bytes = [];
+    for (let i = 0; i + 8 <= bits.length; i += 8) {
+        bytes.push(parseInt(bits.slice(i, i + 8), 2));
+    }
+
+    return Buffer.from(bytes);
+}
+
+function generarCodigoTOTP(secret, timestamp = Date.now()) {
+    const key = base32ABytes(secret);
+    if (!key.length) return null;
+
+    const counter = Math.floor(timestamp / 30000);
+    const buffer = Buffer.alloc(8);
+    buffer.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
+    buffer.writeUInt32BE(counter >>> 0, 4);
+
+    const hmac = crypto.createHmac("sha1", key).update(buffer).digest();
+    const offset = hmac[hmac.length - 1] & 0x0f;
+    const binary =
+        ((hmac[offset] & 0x7f) << 24) |
+        ((hmac[offset + 1] & 0xff) << 16) |
+        ((hmac[offset + 2] & 0xff) << 8) |
+        (hmac[offset + 3] & 0xff);
+
+    return String(binary % 1000000).padStart(6, "0");
+}
+
+function validarCodigoTOTP(secret, codigo) {
+    const codigoNormalizado = String(codigo || "").replace(/\D/g, "");
+    if (codigoNormalizado.length !== 6) return false;
+
+    const offsets = [-30000, 0, 30000];
+    return offsets.some((offset) => generarCodigoTOTP(secret, Date.now() + offset) === codigoNormalizado);
+}
+
+app.use((req, res, next) => {
+  const requiereToken =
+    req.path === "/login" ||
+    req.path === "/login-2fa" ||
+    req.path === "/logout" ||
+    RUTAS_PROTEGIDAS.has(req.path);
+
+  if (requiereToken) {
+    asegurarCsrf(req, res);
+  }
+
+  next();
+});
+
+app.use(validarCsrf);
 
 app.use((req, res, next) => {
   if (RUTAS_PROTEGIDAS.has(req.path)) {
@@ -733,9 +968,13 @@ app.get("/reservar", requireAdmin, (req, res) => {
    LOGOUT
 ===================================================== */
 
-app.get("/logout", (req, res) => {
-    res.clearCookie("pilates-session");
+app.post("/logout", requireAdmin, (req, res) => {
+    limpiarSesionAdmin(req, res);
     req.session.destroy(() => res.redirect("/login"));
+});
+
+app.get("/logout", (req, res) => {
+    res.redirect("/login");
 });
 
 /* =====================================================
@@ -860,9 +1099,42 @@ app.get("/healthz", (req, res) => {
 ===================================================== */
 
 app.post("/asistencia", requireAdmin, async (req, res) => {
+  const fechaHoy = obtenerFechaHoyArgentina();
+  const id = String(req.body?.id || "").trim();
+
+  if (id) {
+    if (!esTextoNumerico(id)) {
+      return res.status(400).send("Id de reserva inválido");
+    }
+
+    const reservaResult = await pool.query(
+      "SELECT id, dia, asistida FROM reservas WHERE id = $1",
+      [id]
+    );
+
+    if (reservaResult.rowCount === 0) {
+      return res.status(404).send("Reserva no encontrada");
+    }
+
+    const reserva = reservaResult.rows[0];
+    if (Number(reserva.asistida) === 1) {
+      return res.status(400).send("La asistencia de esta clase ya estaba registrada");
+    }
+
+    if (String(reserva.dia) >= fechaHoy) {
+      return res.status(400).send("Solo podés marcar asistencia manual en clases de días anteriores");
+    }
+
+    await pool.query(
+      "UPDATE reservas SET asistida = 1 WHERE id = $1",
+      [id]
+    );
+
+    return res.send("Asistencia registrada correctamente");
+  }
+
   const { dni, hora } = req.body;
   if (!dni) return res.status(400).send("DNI requerido");
-  const fechaHoy = obtenerFechaHoyArgentina();
 
   let result;
   if (hora) {

@@ -15,6 +15,35 @@ const opcionesFetch = { credentials: "include", headers: { "Content-Type": "appl
 const THEME_KEY = "pilates-theme";
 const UMBRAL_PACK_POR_VENCER = 2;
 
+function obtenerCsrfToken() {
+  return document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("pilates-csrf="))
+    ?.split("=")[1] || "";
+}
+
+function sincronizarCsrfFetch() {
+  const csrf = decodeURIComponent(obtenerCsrfToken());
+  if (csrf) {
+    opcionesFetch.headers["X-CSRF-Token"] = csrf;
+  }
+}
+
+async function cerrarSesion() {
+  sincronizarCsrfFetch();
+  const res = await fetch("/logout", {
+    method: "POST",
+    ...opcionesFetch
+  });
+
+  if (res.redirected && res.url.includes("/login")) {
+    window.location.href = res.url;
+    return;
+  }
+
+  window.location.href = "/login";
+}
+
 function clasesPorSemana(pack) {
   if (Number(pack) === 4) return 1;
   if (Number(pack) === 8) return 2;
@@ -1283,7 +1312,14 @@ function ordenarClasesPorFecha(lista) {
   return [...lista].sort((a, b) => `${a.dia}|${a.hora}`.localeCompare(`${b.dia}|${b.hora}`));
 }
 
-function crearItemsHistorial(lista, { permitirReprogramar = false, vacio = "Sin clases para mostrar." } = {}) {
+function puedeMarcarAsistenciaManual(reserva) {
+  return String(reserva?.asistida) === "0" && String(reserva?.dia || "") < obtenerFechaHoy();
+}
+
+function crearItemsHistorial(
+  lista,
+  { permitirReprogramar = false, permitirMarcarAsistencia = false, vacio = "Sin clases para mostrar." } = {}
+) {
   if (!lista.length) {
     return `<p class="mb-0 text-body-secondary">${vacio}</p>`;
   }
@@ -1301,6 +1337,14 @@ function crearItemsHistorial(lista, { permitirReprogramar = false, vacio = "Sin 
               <span class="badge rounded-pill ${reserva.asistida == 1 ? "bg-success-subtle text-success-emphasis" : "bg-warning-subtle text-warning-emphasis"}">
                 ${reserva.asistida == 1 ? "Asistió" : "Pendiente"}
               </span>
+              ${permitirMarcarAsistencia && puedeMarcarAsistenciaManual(reserva) ? `
+                <button type="button"
+                        class="btn btn-sm btn-outline-success"
+                        data-action="marcar-asistencia-clase"
+                        data-id="${escapeHtml(reserva.id)}">
+                  Marcar asistencia
+                </button>
+              ` : ""}
               ${permitirReprogramar ? `
                 <button type="button"
                         class="btn btn-sm btn-outline-secondary"
@@ -1386,7 +1430,11 @@ function mostrarClases(dni) {
         <div class="col-12 col-xl-4">
           <div class="history-block h-100">
             <h6 class="mb-3">Clases pendientes</h6>
-            ${crearItemsHistorial(pendientes, { permitirReprogramar: true, vacio: "No hay clases pendientes." })}
+            ${crearItemsHistorial(pendientes, {
+              permitirReprogramar: true,
+              permitirMarcarAsistencia: true,
+              vacio: "No hay clases pendientes."
+            })}
           </div>
         </div>
 
@@ -1544,6 +1592,26 @@ async function reprogramarClase(id) {
   }
 }
 
+async function marcarAsistenciaClase(id) {
+  const res = await fetch("/asistencia", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify({ id })
+  });
+
+  const text = await res.text();
+  alert(text);
+
+  if (!res.ok) return;
+
+  await cargarReservas();
+  const dni = document.getElementById("dniInput").value.trim();
+  if (dni) {
+    await buscarCliente();
+    mostrarClases(dni);
+  }
+}
+
 async function agregarListaEspera(event) {
   event.preventDefault();
 
@@ -1660,6 +1728,7 @@ async function editarCliente(dniActual, nombreActual, telefonoActual) {
 
 document.addEventListener("DOMContentLoaded", () => {
   inicializarTema();
+  sincronizarCsrfFetch();
   const pagoFechaInput = document.getElementById("pagoFecha");
   if (pagoFechaInput) {
     pagoFechaInput.value = obtenerFechaHoy();
@@ -1683,6 +1752,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("formPago")?.addEventListener("submit", registrarPago);
   document.getElementById("editarPagoForm")?.addEventListener("submit", editarPagoDesdeModal);
   document.getElementById("confirmarEliminarPagoBtn")?.addEventListener("click", eliminarPagoDesdeModal);
+  document.getElementById("logoutBtn")?.addEventListener("click", cerrarSesion);
   document.getElementById("pagoBusquedaCliente")?.addEventListener("input", renderizarBusquedasPago);
   document.getElementById("dniInput")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -1763,6 +1833,11 @@ document.addEventListener("click", (event) => {
 
   if (action === "reprogramar-clase") {
     reprogramarClase(button.dataset.id);
+    return;
+  }
+
+  if (action === "marcar-asistencia-clase") {
+    marcarAsistenciaClase(button.dataset.id);
   }
 });
 

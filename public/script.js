@@ -5,6 +5,13 @@
 const THEME_KEY = "pilates-theme";
 let clasesPrefillPendientes = [];
 
+function obtenerCsrfToken() {
+    return document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("pilates-csrf="))
+        ?.split("=")[1] || "";
+}
+
 function aplicarTema(theme) {
     document.documentElement.setAttribute("data-bs-theme", theme);
     const themeToggleBtn = document.getElementById("themeToggleBtn");
@@ -329,7 +336,8 @@ document.getElementById("formReserva").addEventListener("submit", async function
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "Accept": "text/plain, application/json"
+            "Accept": "text/plain, application/json",
+            "X-CSRF-Token": decodeURIComponent(obtenerCsrfToken())
         },
         body: JSON.stringify({ nombre, telefono, dni, pack, clases })
     });

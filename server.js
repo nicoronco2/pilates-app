@@ -1760,7 +1760,13 @@ async function iniciarServidor() {
             console.log("Servidor funcionando seguro");
         });
     } catch (err) {
-        console.error("Error iniciando servidor:", err.message);
+        if (err?.code === "ENOTFOUND") {
+            console.error(
+                `Error iniciando servidor: no se pudo resolver el host de DATABASE_URL (${err.hostname}). Revisar que la base de datos exista en Render y que DATABASE_URL use la Internal Database URL o el valor fromDatabase del Blueprint.`
+            );
+        } else {
+            console.error("Error iniciando servidor:", err.message);
+        }
         process.exit(1);
     }
 }

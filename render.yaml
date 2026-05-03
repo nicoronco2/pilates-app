@@ -14,7 +14,9 @@ services:
       - key: SESSION_SECRET
         sync: false
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: pilates-db
+          property: connectionString
       - key: ADMIN_USERS_JSON
         sync: false
 
@@ -23,3 +25,9 @@ services:
     runtime: static
     buildCommand: ""
     staticPublishPath: ./wakeup-site
+
+databases:
+  - name: pilates-db
+    plan: free
+    databaseName: pilates_db
+    user: pilates_user

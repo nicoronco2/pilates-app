@@ -218,6 +218,7 @@
         const HEALTH_URL = `${APP_URL}/healthz`;
         const statusText = document.getElementById("statusText");
         const manualLink = document.getElementById("manualLink");
+        const MAX_ATTEMPTS_BEFORE_REDIRECT = 8;
 
         manualLink.href = APP_URL;
 
@@ -247,7 +248,13 @@
                     return;
                 }
             } catch (error) {
-                // El backend todavía está despertando.
+                // El backend todavía está despertando o el navegador bloqueó el chequeo.
+            }
+
+            if (attempts >= MAX_ATTEMPTS_BEFORE_REDIRECT) {
+                statusText.textContent = "Redirigiendo a la app...";
+                window.location.href = APP_URL;
+                return;
             }
 
             window.setTimeout(checkHealth, 3500);

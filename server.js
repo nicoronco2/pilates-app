@@ -31,6 +31,7 @@ app.disable("x-powered-by");
 
 // Headers de seguridad
 app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {

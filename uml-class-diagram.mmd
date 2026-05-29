@@ -1,0 +1,146 @@
+classDiagram
+    class Server {
+        +app: Express
+        +pool: Pool
+        +sessionStore: PostgresSessionStore
+        +start(): void
+    }
+
+    class PostgresSessionStore {
+        +pool: Pool
+        +get(sid, callback): void
+        +set(sid, sess, callback): void
+        +destroy(sid, callback): void
+        +touch(sid, sess, callback): void
+        +limpiarExpiradas(): Promise<void>
+    }
+
+    class AuthController {
+        +usuarios: AdminUser[]
+        +login(req, res): void
+        +login2fa(req, res): void
+        +logout(req, res): void
+        +requireAdmin(req, res, next): void
+        +generarCsrfToken(): string
+        +validarCsrf(req, res, next): void
+    }
+
+    class ValidationService {
+        +esTextoNumerico(valor): boolean
+        +esHoraValida(hora): boolean
+        +esFechaValida(fecha): boolean
+        +esFinDeSemana(fecha): boolean
+        +validarClase(clase): string|null
+        +esMontoValido(valor): boolean
+    }
+
+    class ReservationController {
+        +reservar(req, res): void
+        +reservas(req, res): void
+        +asistencia(req, res): void
+        +reprogramar(req, res): void
+    }
+
+    class WaitlistController {
+        +listaEspera(req, res): void
+        +agregarListaEspera(req, res): void
+        +eliminarListaEspera(req, res): void
+    }
+
+    class PaymentController {
+        +registrarPago(req, res): void
+        +editarPago(req, res): void
+        +eliminarPago(req, res): void
+        +ciclosPago(req, res): void
+        +pagos(req, res): void
+        +pagosHistorial(req, res): void
+        +recalcularCicloPago(client, cicloId): Promise<void>
+    }
+
+    class ExportService {
+        +exportClientes(res): void
+        +exportReservas(res): void
+        +exportPagos(res): void
+        +exportListaEspera(res): void
+        +enviarCsv(res, filename, headers, rows): void
+    }
+
+    class CustomerCanonicalizer {
+        +obtenerIndiceClientesCanonicos(client): Promise<Object>
+        +resolverClienteCanonico(indice, registro): Object|null
+        +aplicarClienteCanonico(registro, indice): Object
+    }
+
+    class AdminUser {
+        +user: String
+        +pass: String
+        +twoFactorSecret: String
+    }
+
+    class Reserva {
+        +id: int
+        +nombre: String
+        +telefono: String
+        +dni: String
+        +dia: String
+        +hora: String
+        +pack: int
+        +asistida: int
+    }
+
+    class ListaEspera {
+        +id: int
+        +nombre: String
+        +telefono: String
+        +dni: String
+        +dia: String
+        +hora: String
+        +created_at: Timestamp
+    }
+
+    class CicloPago {
+        +id: int
+        +nombre: String
+        +telefono: String
+        +dni: String
+        +monto_total: Decimal
+        +monto_pagado: Decimal
+        +saldo_pendiente: Decimal
+        +estado: String
+        +fecha_inicio: String
+        +fecha_ultimo_pago: String
+        +periodo_label: String
+        +pack_referencia: int
+    }
+
+    class Pago {
+        +id: int
+        +ciclo_id: int
+        +nombre: String
+        +telefono: String
+        +dni: String
+        +monto: Decimal
+        +fecha: String
+        +forma_pago: String
+        +created_at: Timestamp
+    }
+
+    Server --> PostgresSessionStore
+    Server --> AuthController
+    Server --> ReservationController
+    Server --> WaitlistController
+    Server --> PaymentController
+    Server --> ExportService
+    Server --> ValidationService
+    Server --> CustomerCanonicalizer
+    AuthController --> AdminUser
+    ReservationController --> Reserva
+    WaitlistController --> ListaEspera
+    PaymentController --> CicloPago
+    PaymentController --> Pago
+    Pago --> CicloPago : belongsTo
+    CicloPago --> Pago : hasMany
+    CustomerCanonicalizer ..> Reserva
+    CustomerCanonicalizer ..> ListaEspera
+    CustomerCanonicalizer ..> CicloPago
+    CustomerCanonicalizer ..> Pago

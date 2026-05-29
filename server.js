@@ -1169,6 +1169,44 @@ app.post("/asistencia", requireAdmin, async (req, res) => {
   return res.send("Asistencia registrada correctamente");
 });
 
+app.post("/ausencia", requireAdmin, async (req, res) => {
+  const id = String(req.body?.id || "").trim();
+
+  if (!id || !esTextoNumerico(id)) {
+    return res.status(400).send("Id de reserva invÃ¡lido");
+  }
+
+  try {
+    const reservaResult = await pool.query(
+      "SELECT id, asistida FROM reservas WHERE id = $1",
+      [id]
+    );
+
+    if (reservaResult.rowCount === 0) {
+      return res.status(404).send("Reserva no encontrada");
+    }
+
+    const reserva = reservaResult.rows[0];
+    if (Number(reserva.asistida) === 1) {
+      return res.status(400).send("La asistencia de esta clase ya estaba registrada");
+    }
+
+    if (Number(reserva.asistida) === 2) {
+      return res.status(400).send("La ausencia de esta clase ya estaba registrada");
+    }
+
+    await pool.query(
+      "UPDATE reservas SET asistida = 2 WHERE id = $1",
+      [id]
+    );
+
+    return res.send("Ausencia registrada correctamente");
+  } catch (err) {
+    console.error("/ausencia error:", err);
+    return res.status(500).send("Error interno");
+  }
+});
+
 app.post("/reprogramar", requireAdmin, async (req, res) => {
   const { id, dia, hora } = req.body;
   if (!id || !dia || !hora) return res.status(400).send("Datos incompletos");

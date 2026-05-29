@@ -1259,8 +1259,8 @@ async function cargarCalendario() {
       const personas = datos.filter((reserva) => reserva.dia === dia && reserva.hora === hora).slice(0, 4);
       let contenido = "";
       personas.forEach((persona) => {
-        const color = persona.asistida == 1 ? "bg-success" : "bg-warning";
-        contenido += `<div class="${color} text-white rounded p-1 mb-1 small">${escapeHtml(persona.nombre)}</div>`;
+        const estado = obtenerEstadoReserva(persona);
+        contenido += `<div class="${estado.calendarioClase} text-white rounded p-1 mb-1 small">${escapeHtml(persona.nombre)}</div>`;
       });
       fila += `<td>${contenido}</td>`;
     });
@@ -1316,9 +1316,39 @@ function puedeMarcarAsistenciaManual(reserva) {
   return String(reserva?.asistida) === "0" && String(reserva?.dia || "") < obtenerFechaHoy();
 }
 
+function obtenerEstadoReserva(reserva) {
+  const estado = String(reserva?.asistida);
+  if (estado === "1") {
+    return {
+      texto: "Asistió",
+      badgeClase: "bg-success-subtle text-success-emphasis",
+      calendarioClase: "bg-success"
+    };
+  }
+
+  if (estado === "2") {
+    return {
+      texto: "Ausente",
+      badgeClase: "bg-danger-subtle text-danger-emphasis",
+      calendarioClase: "bg-danger"
+    };
+  }
+
+  return {
+    texto: "Pendiente",
+    badgeClase: "bg-warning-subtle text-warning-emphasis",
+    calendarioClase: "bg-warning"
+  };
+}
+
 function crearItemsHistorial(
   lista,
-  { permitirReprogramar = false, permitirMarcarAsistencia = false, vacio = "Sin clases para mostrar." } = {}
+  {
+    permitirReprogramar = false,
+    permitirMarcarAsistencia = false,
+    permitirMarcarAusencia = false,
+    vacio = "Sin clases para mostrar."
+  } = {}
 ) {
   if (!lista.length) {
     return `<p class="mb-0 text-body-secondary">${vacio}</p>`;
@@ -1326,37 +1356,51 @@ function crearItemsHistorial(
 
   return `
     <div class="history-list">
-      ${lista.map((reserva) => `
-        <div class="history-item">
-          <div class="history-item-header">
-            <div>
-              <strong>${formatearFecha(reserva.dia)}</strong>
-              <div class="history-item-meta">Horario ${escapeHtml(reserva.hora)}</div>
-            </div>
-            <div class="d-flex align-items-start gap-2 flex-wrap">
-              <span class="badge rounded-pill ${reserva.asistida == 1 ? "bg-success-subtle text-success-emphasis" : "bg-warning-subtle text-warning-emphasis"}">
-                ${reserva.asistida == 1 ? "Asistió" : "Pendiente"}
-              </span>
-              ${permitirMarcarAsistencia && puedeMarcarAsistenciaManual(reserva) ? `
-                <button type="button"
-                        class="btn btn-sm btn-outline-success"
-                        data-action="marcar-asistencia-clase"
-                        data-id="${escapeHtml(reserva.id)}">
-                  Marcar asistencia
-                </button>
-              ` : ""}
-              ${permitirReprogramar ? `
-                <button type="button"
-                        class="btn btn-sm btn-outline-secondary"
-                        data-action="reprogramar-clase"
-                        data-id="${escapeHtml(reserva.id)}">
-                  Reprogramar
-                </button>
-              ` : ""}
+      ${lista.map((reserva) => {
+        const estado = obtenerEstadoReserva(reserva);
+        const estaPendiente = String(reserva.asistida) === "0";
+        return `
+          <div class="history-item">
+            <div class="history-item-header">
+              <div>
+                <strong>${formatearFecha(reserva.dia)}</strong>
+                <div class="history-item-meta">Horario ${escapeHtml(reserva.hora)}</div>
+              </div>
+              <div class="d-flex align-items-start gap-2 flex-wrap">
+                <span class="badge rounded-pill ${estado.badgeClase}">
+                  ${estado.texto}
+                </span>
+                ${permitirMarcarAsistencia && puedeMarcarAsistenciaManual(reserva) ? `
+                  <button type="button"
+                          class="btn btn-sm btn-outline-success"
+                          data-action="marcar-asistencia-clase"
+                          data-id="${escapeHtml(reserva.id)}">
+                    Marcar asistencia
+                  </button>
+                ` : ""}
+                ${permitirMarcarAusencia && estaPendiente ? `
+                  <button type="button"
+                          class="btn btn-sm btn-danger"
+                          data-action="marcar-ausencia-clase"
+                          data-id="${escapeHtml(reserva.id)}"
+                          data-fecha="${escapeHtml(reserva.dia)}"
+                          data-hora="${escapeHtml(reserva.hora)}">
+                    Marcar ausencia
+                  </button>
+                ` : ""}
+                ${permitirReprogramar && estaPendiente ? `
+                  <button type="button"
+                          class="btn btn-sm btn-outline-secondary"
+                          data-action="reprogramar-clase"
+                          data-id="${escapeHtml(reserva.id)}">
+                    Reprogramar
+                  </button>
+                ` : ""}
+              </div>
             </div>
           </div>
-        </div>
-      `).join("")}
+        `;
+      }).join("")}
     </div>
   `;
 }
@@ -1372,6 +1416,8 @@ function mostrarClases(dni) {
   const cliente = clasesOrdenadas[0];
   const pendientes = clasesOrdenadas.filter((reserva) => reserva.asistida == 0);
   const asistidas = clasesOrdenadas.filter((reserva) => reserva.asistida == 1);
+  const ausentes = clasesOrdenadas.filter((reserva) => reserva.asistida == 2);
+  const pendientesYAusentes = clasesOrdenadas.filter((reserva) => reserva.asistida == 0 || reserva.asistida == 2);
   const hoy = obtenerFechaHoy();
   const proximaClase = pendientes.find((reserva) => `${reserva.dia}|${reserva.hora}` >= `${hoy}|00:00`) || pendientes[0] || null;
   const estadoPack = obtenerEstadoPack(pendientes.length);
@@ -1407,6 +1453,10 @@ function mostrarClases(dni) {
           <div class="history-metric-label">Asistidas</div>
           <div class="history-metric-value">${asistidas.length}</div>
         </div>
+        <div class="history-metric">
+          <div class="history-metric-label">Ausentes</div>
+          <div class="history-metric-value">${ausentes.length}</div>
+        </div>
       </div>
 
       <div class="row g-3">
@@ -1430,9 +1480,10 @@ function mostrarClases(dni) {
         <div class="col-12 col-xl-4">
           <div class="history-block h-100">
             <h6 class="mb-3">Clases pendientes</h6>
-            ${crearItemsHistorial(pendientes, {
+            ${crearItemsHistorial(pendientesYAusentes, {
               permitirReprogramar: true,
               permitirMarcarAsistencia: true,
+              permitirMarcarAusencia: true,
               vacio: "No hay clases pendientes."
             })}
           </div>
@@ -1594,6 +1645,31 @@ async function reprogramarClase(id) {
 
 async function marcarAsistenciaClase(id) {
   const res = await fetch("/asistencia", {
+    method: "POST",
+    ...opcionesFetch,
+    body: JSON.stringify({ id })
+  });
+
+  const text = await res.text();
+  alert(text);
+
+  if (!res.ok) return;
+
+  await cargarReservas();
+  const dni = document.getElementById("dniInput").value.trim();
+  if (dni) {
+    await buscarCliente();
+    mostrarClases(dni);
+  }
+}
+
+async function marcarAusenciaClase(id, fecha, hora) {
+  const detalle = [fecha ? formatearFecha(fecha) : "", hora ? `a las ${hora}` : ""].filter(Boolean).join(" ");
+  if (!confirm(`¿Marcar esta clase ${detalle} como ausente?`)) {
+    return;
+  }
+
+  const res = await fetch("/ausencia", {
     method: "POST",
     ...opcionesFetch,
     body: JSON.stringify({ id })
@@ -1838,6 +1914,11 @@ document.addEventListener("click", (event) => {
 
   if (action === "marcar-asistencia-clase") {
     marcarAsistenciaClase(button.dataset.id);
+    return;
+  }
+
+  if (action === "marcar-ausencia-clase") {
+    marcarAusenciaClase(button.dataset.id, button.dataset.fecha, button.dataset.hora);
   }
 });
 

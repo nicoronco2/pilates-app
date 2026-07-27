@@ -4,12 +4,64 @@
 
 const THEME_KEY = "pilates-theme";
 let clasesPrefillPendientes = [];
+const feriadosCache = new Map();
 
 function obtenerCsrfToken() {
     return document.cookie
         .split("; ")
         .find((row) => row.startsWith("pilates-csrf="))
         ?.split("=")[1] || "";
+}
+
+function formatearFecha(fechaTexto) {
+    if (!fechaTexto) return "";
+    const [year, month, day] = String(fechaTexto).split("-");
+    return `${day}/${month}/${year}`;
+}
+
+async function obtenerFeriadosPorRango(desde, hasta) {
+    const cacheKey = `${desde}|${hasta}`;
+    if (feriadosCache.has(cacheKey)) {
+        return feriadosCache.get(cacheKey);
+    }
+
+    try {
+        const res = await fetch(`/feriados?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, {
+            cache: "no-store"
+        });
+        if (!res.ok) throw new Error(`Error ${res.status}`);
+
+        const data = await res.json();
+        const feriados = Array.isArray(data.feriados) ? data.feriados : [];
+        feriadosCache.set(cacheKey, feriados);
+        return feriados;
+    } catch (error) {
+        console.error("feriados:", error);
+        return [];
+    }
+}
+
+async function obtenerFeriadoFecha(fecha) {
+    const feriados = await obtenerFeriadosPorRango(fecha, fecha);
+    return feriados[0] || null;
+}
+
+async function actualizarAvisoFeriado(inputFecha) {
+    const clase = inputFecha.closest(".clase");
+    const aviso = clase?.querySelector(".feriado-aviso");
+    if (!aviso) return null;
+
+    aviso.classList.add("d-none");
+    aviso.textContent = "";
+
+    if (!inputFecha.value) return null;
+
+    const feriado = await obtenerFeriadoFecha(inputFecha.value);
+    if (!feriado) return null;
+
+    aviso.classList.remove("d-none");
+    aviso.textContent = `${formatearFecha(feriado.fecha)} es feriado: ${feriado.nombre}. Podés reservar igual si el estudio abre.`;
+    return feriado;
 }
 
 function aplicarTema(theme) {
@@ -56,6 +108,7 @@ function generarClases() {
 
             <label class="form-label">Fecha</label>
             <input type="date" class="fecha form-control mb-2" required>
+            <div class="feriado-aviso alert alert-warning py-2 mb-2 d-none"></div>
 
             <label class="form-label">Horario</label>
             <select class="hora form-select" required>
@@ -94,6 +147,7 @@ function generarClases() {
 
             /* CARGAR HORARIOS */
             cambiarHorarios(this);
+            actualizarAvisoFeriado(this);
         });
     });
 
@@ -207,6 +261,7 @@ async function aplicarClasesPrefill(clases) {
 
         fechas[i].value = clases[i].dia;
         await cambiarHorarios(fechas[i]);
+        await actualizarAvisoFeriado(fechas[i]);
 
         const existeHorario = Array.from(horas[i].options).some(option => option.value === clases[i].hora);
         if (existeHorario) {
@@ -328,6 +383,21 @@ document.getElementById("formReserva").addEventListener("submit", async function
     for (let s in semanas) {
         if (semanas[s] > porSemana) {
             alert("Superaste la cantidad de clases permitidas por semana");
+            return;
+        }
+    }
+
+    const feriadosSeleccionados = [];
+    for (const clase of clases) {
+        const feriado = await obtenerFeriadoFecha(clase.dia);
+        if (feriado) {
+            feriadosSeleccionados.push(`${formatearFecha(feriado.fecha)}: ${feriado.nombre}`);
+        }
+    }
+
+    if (feriadosSeleccionados.length > 0) {
+        const mensaje = `Hay clases programadas en feriado:\n\n${feriadosSeleccionados.join("\n")}\n\n¿Querés guardar la reserva igual?`;
+        if (!confirm(mensaje)) {
             return;
         }
     }

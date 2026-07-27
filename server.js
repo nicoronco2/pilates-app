@@ -3,6 +3,7 @@ const path = require("path");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
+const https = require("https");
 require("dotenv").config();
 const validator = require("validator");
 const helmet = require("helmet");
@@ -21,6 +22,9 @@ const SESSION_ABSOLUTE_TIMEOUT_MS = 1000 * 60 * 60 * 8;
 const RUTAS_PROTEGIDAS = new Set(["/admin", "/admin.html", "/reservar", "/reservar.html"]);
 const CSRF_COOKIE_NAME = "pilates-csrf";
 const TWO_FACTOR_WINDOW_MS = 1000 * 60 * 10;
+const FERIADOS_API_BASE_URL = "https://api.argentinadatos.com/v1/feriados";
+const FERIADOS_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+const feriadosMemoria = new Map();
 
 /* =====================================================
    SEGURIDAD BASE
@@ -242,6 +246,15 @@ async function inicializarBaseDeDatos() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     `);
+
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS feriados_cache (
+        anio INTEGER PRIMARY KEY,
+        data JSONB NOT NULL,
+        source TEXT NOT NULL DEFAULT 'argentinadatos',
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    `);
 }
 
 /* =====================================================
@@ -362,6 +375,150 @@ function validarClase({ dia, hora }) {
     if (esFinDeSemana(dia)) return "Los sábados y domingos no hay clases";
     if (!esHoraValida(hora)) return "Horario inválido";
     return null;
+}
+
+function obtenerAnioFecha(fecha) {
+    const partes = obtenerPartesFecha(fecha);
+    return partes ? partes.date.getUTCFullYear() : null;
+}
+
+function solicitarJsonHttps(url, timeoutMs = 5000) {
+    return new Promise((resolve, reject) => {
+        const req = https.get(url, {
+            headers: {
+                "Accept": "application/json",
+                "User-Agent": "pilates-web/1.0"
+            }
+        }, (response) => {
+            let data = "";
+            response.setEncoding("utf8");
+            response.on("data", (chunk) => {
+                data += chunk;
+            });
+            response.on("end", () => {
+                if (response.statusCode < 200 || response.statusCode >= 300) {
+                    return reject(new Error(`Feriados API status ${response.statusCode}`));
+                }
+
+                try {
+                    return resolve(JSON.parse(data));
+                } catch (error) {
+                    return reject(error);
+                }
+            });
+        });
+
+        req.setTimeout(timeoutMs, () => {
+            req.destroy(new Error("Timeout consultando feriados"));
+        });
+
+        req.on("error", reject);
+    });
+}
+
+function normalizarFeriado(item) {
+    const fecha = String(item?.fecha || "").trim();
+    if (!esFechaValida(fecha)) return null;
+
+    return {
+        fecha,
+        nombre: String(item?.nombre || "Feriado").trim(),
+        tipo: String(item?.tipo || "feriado").trim()
+    };
+}
+
+async function consultarFeriadosExternos(anio) {
+    const data = await solicitarJsonHttps(`${FERIADOS_API_BASE_URL}/${anio}`);
+    if (!Array.isArray(data)) {
+        throw new Error("Respuesta de feriados invalida");
+    }
+
+    return data
+        .map(normalizarFeriado)
+        .filter(Boolean)
+        .sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+async function leerFeriadosCacheDb(anio) {
+    const result = await pool.query(
+        "SELECT data, updated_at FROM feriados_cache WHERE anio = $1",
+        [anio]
+    );
+
+    if (result.rowCount === 0) return null;
+
+    const feriados = Array.isArray(result.rows[0].data)
+        ? result.rows[0].data.map(normalizarFeriado).filter(Boolean)
+        : [];
+
+    return {
+        feriados,
+        fetchedAt: new Date(result.rows[0].updated_at).getTime()
+    };
+}
+
+async function guardarFeriadosCacheDb(anio, feriados) {
+    await pool.query(
+        `INSERT INTO feriados_cache (anio, data, source, updated_at)
+         VALUES ($1, $2::jsonb, 'argentinadatos', NOW())
+         ON CONFLICT (anio)
+         DO UPDATE SET data = EXCLUDED.data, source = EXCLUDED.source, updated_at = NOW()`,
+        [anio, JSON.stringify(feriados)]
+    );
+}
+
+async function obtenerFeriadosAnio(anio) {
+    const ahora = Date.now();
+    const memoria = feriadosMemoria.get(anio);
+    if (memoria && ahora - memoria.fetchedAt < FERIADOS_CACHE_TTL_MS) {
+        return memoria.feriados;
+    }
+
+    const cacheDb = await leerFeriadosCacheDb(anio).catch((error) => {
+        console.error("feriados cache db read error:", error);
+        return null;
+    });
+
+    if (cacheDb && ahora - cacheDb.fetchedAt < FERIADOS_CACHE_TTL_MS) {
+        feriadosMemoria.set(anio, cacheDb);
+        return cacheDb.feriados;
+    }
+
+    try {
+        const feriados = await consultarFeriadosExternos(anio);
+        const itemCache = { feriados, fetchedAt: ahora };
+        feriadosMemoria.set(anio, itemCache);
+        await guardarFeriadosCacheDb(anio, feriados).catch((error) => {
+            console.error("feriados cache db write error:", error);
+        });
+        return feriados;
+    } catch (error) {
+        console.error("feriados externos error:", error.message);
+        if (cacheDb) {
+            feriadosMemoria.set(anio, cacheDb);
+            return cacheDb.feriados;
+        }
+        return [];
+    }
+}
+
+async function obtenerFeriadosRango(desde, hasta) {
+    if (!esFechaValida(desde) || !esFechaValida(hasta) || desde > hasta) {
+        return null;
+    }
+
+    const anioDesde = obtenerAnioFecha(desde);
+    const anioHasta = obtenerAnioFecha(hasta);
+    const anios = [];
+    for (let anio = anioDesde; anio <= anioHasta; anio++) {
+        anios.push(anio);
+    }
+
+    const feriadosPorAnio = await Promise.all(anios.map((anio) => obtenerFeriadosAnio(anio)));
+    return feriadosPorAnio
+        .flat()
+        .filter((feriado) => feriado.fecha >= desde && feriado.fecha <= hasta)
+        .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.nombre.localeCompare(b.nombre));
 }
 
 function obtenerFechaHoyArgentina() {
@@ -1072,6 +1229,23 @@ app.get("/reservas", requireAdmin, async (req, res) => {
         return res.json(result.rows);
     } catch (err) {
         console.error("/reservas error:", err);
+        return res.status(500).send("Error interno");
+    }
+});
+
+app.get("/feriados", requireAdmin, async (req, res) => {
+    const desde = String(req.query.desde || "").trim();
+    const hasta = String(req.query.hasta || desde).trim();
+
+    try {
+        const feriados = await obtenerFeriadosRango(desde, hasta);
+        if (!feriados) {
+            return res.status(400).send("Rango de fechas invalido");
+        }
+
+        return res.json({ feriados });
+    } catch (err) {
+        console.error("/feriados error:", err);
         return res.status(500).send("Error interno");
     }
 });

@@ -9,6 +9,7 @@ let clientePagoSeleccionado = null;
 let editarPagoModalInstance = null;
 let eliminarPagoModalInstance = null;
 let historialPagoContexto = null;
+const feriadosCache = new Map();
 
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
 const opcionesFetch = { credentials: "include", headers: { "Content-Type": "application/json" } };
@@ -118,6 +119,45 @@ function obtenerFechaHoy() {
   const day = parts.find((part) => part.type === "day")?.value;
 
   return `${year}-${month}-${day}`;
+}
+
+async function obtenerFeriadosPorRango(desde, hasta) {
+  const cacheKey = `${desde}|${hasta}`;
+  if (feriadosCache.has(cacheKey)) {
+    return feriadosCache.get(cacheKey);
+  }
+
+  try {
+    const res = await fetch(`/feriados?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, {
+      ...opcionesFetch,
+      cache: "no-store"
+    });
+    if (res.status === 401 || res.status === 403) {
+      window.location.href = "/login";
+      return [];
+    }
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+
+    const data = await res.json();
+    const feriados = Array.isArray(data.feriados) ? data.feriados : [];
+    feriadosCache.set(cacheKey, feriados);
+    return feriados;
+  } catch (error) {
+    console.error("feriados:", error);
+    return [];
+  }
+}
+
+function indexarFeriados(feriados) {
+  return feriados.reduce((acc, feriado) => {
+    if (feriado?.fecha) acc[feriado.fecha] = feriado;
+    return acc;
+  }, {});
+}
+
+async function obtenerFeriadoFecha(fecha) {
+  const feriados = await obtenerFeriadosPorRango(fecha, fecha);
+  return feriados[0] || null;
 }
 
 function formatearFecha(fechaTexto) {
@@ -1243,26 +1283,43 @@ async function cargarCalendario() {
     d.setDate(lunes.getDate() + i);
     dias.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
   }
+  const feriadosSemana = await obtenerFeriadosPorRango(dias[0], dias[4]);
+  const feriadosPorFecha = indexarFeriados(feriadosSemana);
 
   document.getElementById("tituloSemana").innerText =
     `Semana del ${formatearFecha(dias[0])} al ${formatearFecha(dias[4])}`;
 
   const tabla = document.getElementById("tablaCalendario");
+  const nombresDias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
   tabla.innerHTML = `
     <tr>
-      <th>Hora</th><th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th><th>Viernes</th>
+      <th>Hora</th>
+      ${dias.map((dia, index) => {
+        const feriado = feriadosPorFecha[dia];
+        return `
+          <th class="${feriado ? "table-warning" : ""}" title="${feriado ? escapeHtml(`${feriado.nombre} (${feriado.tipo})`) : ""}">
+            <div>${nombresDias[index]}</div>
+            <div class="small fw-normal">${formatearFecha(dia)}</div>
+            ${feriado ? `
+              <span class="badge rounded-pill bg-danger-subtle text-danger-emphasis mt-1">Feriado</span>
+              <div class="small fw-normal text-danger mt-1">${escapeHtml(feriado.nombre)}</div>
+            ` : ""}
+          </th>
+        `;
+      }).join("")}
     </tr>`;
 
   horarios.forEach((hora) => {
     let fila = `<tr><td><b>${hora}</b></td>`;
     dias.forEach((dia) => {
+      const feriado = feriadosPorFecha[dia];
       const personas = datos.filter((reserva) => reserva.dia === dia && reserva.hora === hora).slice(0, 4);
       let contenido = "";
       personas.forEach((persona) => {
         const estado = obtenerEstadoReserva(persona);
         contenido += `<div class="${estado.calendarioClase} text-white rounded p-1 mb-1 small">${escapeHtml(persona.nombre)}</div>`;
       });
-      fila += `<td>${contenido}</td>`;
+      fila += `<td class="${feriado ? "table-warning" : ""}">${contenido}</td>`;
     });
     fila += "</tr>";
     tabla.innerHTML += fila;
@@ -1625,6 +1682,11 @@ async function reprogramarClase(id) {
   const nuevaHora = prompt("Nueva hora (HH:MM):");
   if (!nuevaHora) return;
 
+  const feriado = await obtenerFeriadoFecha(nuevaFecha.trim());
+  if (feriado && !confirm(`${formatearFecha(feriado.fecha)} es feriado: ${feriado.nombre}. ¿Querés reprogramar la clase igual?`)) {
+    return;
+  }
+
   const res = await fetch("/reprogramar", {
     method: "POST",
     ...opcionesFetch,
@@ -1688,6 +1750,24 @@ async function marcarAusenciaClase(id, fecha, hora) {
   }
 }
 
+async function actualizarAvisoFeriadoListaEspera() {
+  const inputFecha = document.getElementById("esperaDia");
+  const aviso = document.getElementById("esperaFeriadoAviso");
+  if (!inputFecha || !aviso) return null;
+
+  aviso.classList.add("d-none");
+  aviso.textContent = "";
+
+  if (!inputFecha.value) return null;
+
+  const feriado = await obtenerFeriadoFecha(inputFecha.value);
+  if (!feriado) return null;
+
+  aviso.classList.remove("d-none");
+  aviso.textContent = `${formatearFecha(feriado.fecha)} es feriado: ${feriado.nombre}. Podés cargar lista de espera igual si el estudio abre.`;
+  return feriado;
+}
+
 async function agregarListaEspera(event) {
   event.preventDefault();
 
@@ -1698,6 +1778,11 @@ async function agregarListaEspera(event) {
     dia: document.getElementById("esperaDia")?.value,
     hora: document.getElementById("esperaHora")?.value
   };
+
+  const feriado = payload.dia ? await obtenerFeriadoFecha(payload.dia) : null;
+  if (feriado && !confirm(`${formatearFecha(feriado.fecha)} es feriado: ${feriado.nombre}. ¿Querés agregar a lista de espera igual?`)) {
+    return;
+  }
 
   const res = await fetch("/lista-espera", {
     method: "POST",
@@ -1711,6 +1796,7 @@ async function agregarListaEspera(event) {
   if (!res.ok) return;
 
   document.getElementById("formListaEspera")?.reset();
+  await actualizarAvisoFeriadoListaEspera();
   await cargarListaEspera();
 }
 
@@ -1825,6 +1911,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("filtroPagos")?.addEventListener("input", renderizarResumenPagos);
   document.getElementById("limpiarFiltrosBtn")?.addEventListener("click", limpiarFiltrosClientes);
   document.getElementById("formListaEspera")?.addEventListener("submit", agregarListaEspera);
+  document.getElementById("esperaDia")?.addEventListener("change", actualizarAvisoFeriadoListaEspera);
   document.getElementById("formPago")?.addEventListener("submit", registrarPago);
   document.getElementById("editarPagoForm")?.addEventListener("submit", editarPagoDesdeModal);
   document.getElementById("confirmarEliminarPagoBtn")?.addEventListener("click", eliminarPagoDesdeModal);

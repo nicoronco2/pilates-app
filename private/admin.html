@@ -241,6 +241,40 @@
             font-size:.92rem;
         }
 
+        .calendar-cell{
+            min-width:150px;
+            vertical-align:top;
+        }
+
+        .calendar-cell-today{
+            box-shadow:inset 0 0 0 2px rgba(13,110,253,.35);
+        }
+
+        .calendar-capacity{
+            color:#6c757d;
+            font-size:.78rem;
+            margin-bottom:6px;
+        }
+
+        .calendar-booking{
+            cursor:default;
+            line-height:1.25;
+        }
+
+        .calendar-booking small{
+            display:block;
+            opacity:.9;
+        }
+
+        .calendar-full{
+            color:#dc3545;
+            font-weight:600;
+        }
+
+        .toast-container{
+            z-index:1090;
+        }
+
         .economic-dashboard{
             border:1px solid rgba(0,0,0,0.08);
             border-radius:20px;
@@ -347,6 +381,16 @@
 
         [data-bs-theme="dark"] .payment-modal-note{
             color:#adb5bd;
+        }
+
+        [data-bs-theme="dark"] .calendar-capacity{
+            color:#adb5bd;
+        }
+
+        [data-bs-theme="dark"] .table-warning{
+            --bs-table-bg:#3a2b12;
+            --bs-table-color:#f7e5b0;
+            --bs-table-border-color:#58431d;
         }
 
         @media (max-width:768px){
@@ -594,6 +638,7 @@
         <div class="d-flex flex-column flex-md-row gap-2 mb-3">
             <button id="btnSemanaAnt" type="button" class="btn btn-outline-secondary w-100 w-md-auto">Semana anterior</button>
             <button id="btnSemanaAct" type="button" class="btn btn-outline-dark w-100 w-md-auto">Semana actual</button>
+            <button id="btnCalendarioHoy" type="button" class="btn btn-outline-primary w-100 w-md-auto">Hoy</button>
             <button id="btnSemanaSig" type="button" class="btn btn-outline-secondary w-100 w-md-auto">Semana siguiente</button>
         </div>
 
@@ -672,6 +717,44 @@
 </div>
 <script src="/admin.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<div class="toast-container position-fixed top-0 end-0 p-3" id="toastContainer"></div>
+
+<div class="modal fade" id="reprogramarClaseModal" tabindex="-1" aria-labelledby="reprogramarClaseModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="reprogramarClaseForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reprogramarClaseModalLabel">Reprogramar clase</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="reprogramarClaseId">
+
+                    <div id="reprogramarClaseResumen" class="payment-modal-note mb-3"></div>
+
+                    <div class="mb-3">
+                        <label for="reprogramarFecha" class="form-label">Nueva fecha</label>
+                        <input type="date" id="reprogramarFecha" class="form-control" required>
+                    </div>
+
+                    <div id="reprogramarFeriadoAviso" class="alert alert-warning py-2 d-none"></div>
+
+                    <div class="mb-0">
+                        <label for="reprogramarHora" class="form-label">Nuevo horario</label>
+                        <select id="reprogramarHora" class="form-select" required>
+                            <option value="">Elegí una fecha primero</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" id="reprogramarGuardarBtn" class="btn btn-primary">Guardar cambio</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <div class="modal fade" id="editarPagoModal" tabindex="-1" aria-labelledby="editarPagoModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">

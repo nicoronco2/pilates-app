@@ -8,7 +8,9 @@ let pagosGlobal = [];
 let clientePagoSeleccionado = null;
 let editarPagoModalInstance = null;
 let eliminarPagoModalInstance = null;
+let reprogramarClaseModalInstance = null;
 let historialPagoContexto = null;
+let reprogramarClaseContexto = null;
 const feriadosCache = new Map();
 
 const horarios = ["08:00", "09:00", "10:00", "11:00", "16:00", "17:00", "18:00", "19:00"];
@@ -83,6 +85,42 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function mostrarToast(mensaje, tipo = "info") {
+  const container = document.getElementById("toastContainer");
+  if (!container || !window.bootstrap) {
+    alert(mensaje);
+    return;
+  }
+
+  const clases = {
+    success: "text-bg-success",
+    danger: "text-bg-danger",
+    warning: "text-bg-warning",
+    info: "text-bg-primary"
+  };
+
+  const toast = document.createElement("div");
+  toast.className = `toast align-items-center border-0 ${clases[tipo] || clases.info}`;
+  toast.setAttribute("role", "status");
+  toast.setAttribute("aria-live", "polite");
+  toast.setAttribute("aria-atomic", "true");
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${escapeHtml(mensaje)}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+    </div>
+  `;
+
+  container.appendChild(toast);
+  const instance = new bootstrap.Toast(toast, { delay: 4200 });
+  toast.addEventListener("hidden.bs.toast", () => toast.remove());
+  instance.show();
+}
+
+function mostrarResultadoHttp(mensaje, ok) {
+  mostrarToast(mensaje, ok ? "success" : "danger");
 }
 
 function normalizarTexto(valor) {
@@ -173,6 +211,30 @@ function formatearDiaSemana(fechaTexto) {
   const fecha = new Date(year, month - 1, day);
   const nombre = fecha.toLocaleDateString("es-AR", { weekday: "long" });
   return nombre.charAt(0).toUpperCase() + nombre.slice(1);
+}
+
+function esFinDeSemana(fechaTexto) {
+  const [year, month, day] = String(fechaTexto).split("-").map(Number);
+  if (!year || !month || !day) return false;
+  const fecha = new Date(year, month - 1, day);
+  const dia = fecha.getDay();
+  return dia === 0 || dia === 6;
+}
+
+function obtenerReservaPorId(id) {
+  return Object.values(clientesGlobal)
+    .flat()
+    .find((reserva) => String(reserva.id) === String(id)) || null;
+}
+
+function contarReservasEnHorario(dia, hora, excluirId = null) {
+  return Object.values(clientesGlobal)
+    .flat()
+    .filter((reserva) =>
+      reserva.dia === dia &&
+      reserva.hora === hora &&
+      String(reserva.id) !== String(excluirId || "")
+    ).length;
 }
 
 function formatearMonto(valor) {
@@ -1013,7 +1075,7 @@ async function editarPagoDesdeModal(event) {
   });
 
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
   if (!res.ok) return;
 
   editarPagoModalInstance?.hide();
@@ -1047,7 +1109,7 @@ async function eliminarPagoDesdeModal() {
   });
 
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
   if (!res.ok) return;
 
   eliminarPagoModalInstance?.hide();
@@ -1068,7 +1130,7 @@ async function registrarPago(event) {
   event.preventDefault();
 
   if (!clientePagoSeleccionado) {
-    alert("Primero seleccioná un cliente");
+    mostrarToast("Primero seleccioná un cliente", "warning");
     return;
   }
 
@@ -1090,7 +1152,7 @@ async function registrarPago(event) {
   });
 
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
   if (!res.ok) return;
 
   document.getElementById("formPago").reset();
@@ -1285,6 +1347,7 @@ async function cargarCalendario() {
   }
   const feriadosSemana = await obtenerFeriadosPorRango(dias[0], dias[4]);
   const feriadosPorFecha = indexarFeriados(feriadosSemana);
+  const hoy = obtenerFechaHoy();
 
   document.getElementById("tituloSemana").innerText =
     `Semana del ${formatearFecha(dias[0])} al ${formatearFecha(dias[4])}`;
@@ -1296,10 +1359,12 @@ async function cargarCalendario() {
       <th>Hora</th>
       ${dias.map((dia, index) => {
         const feriado = feriadosPorFecha[dia];
+        const esHoy = dia === hoy;
         return `
-          <th class="${feriado ? "table-warning" : ""}" title="${feriado ? escapeHtml(`${feriado.nombre} (${feriado.tipo})`) : ""}">
+          <th class="${[feriado ? "table-warning" : "", esHoy ? "calendar-cell-today" : ""].filter(Boolean).join(" ")}" title="${feriado ? escapeHtml(`${feriado.nombre} (${feriado.tipo})`) : ""}">
             <div>${nombresDias[index]}</div>
             <div class="small fw-normal">${formatearFecha(dia)}</div>
+            ${esHoy ? `<span class="badge rounded-pill bg-primary-subtle text-primary-emphasis mt-1">Hoy</span>` : ""}
             ${feriado ? `
               <span class="badge rounded-pill bg-danger-subtle text-danger-emphasis mt-1">Feriado</span>
               <div class="small fw-normal text-danger mt-1">${escapeHtml(feriado.nombre)}</div>
@@ -1313,13 +1378,23 @@ async function cargarCalendario() {
     let fila = `<tr><td><b>${hora}</b></td>`;
     dias.forEach((dia) => {
       const feriado = feriadosPorFecha[dia];
-      const personas = datos.filter((reserva) => reserva.dia === dia && reserva.hora === hora).slice(0, 4);
+      const esHoy = dia === hoy;
+      const personas = datos.filter((reserva) => reserva.dia === dia && reserva.hora === hora);
+      const personasVisibles = personas.slice(0, 4);
+      const cuposTexto = `${personas.length}/4 cupos`;
       let contenido = "";
-      personas.forEach((persona) => {
+      contenido += `<div class="calendar-capacity ${personas.length >= 4 ? "calendar-full" : ""}">${cuposTexto}</div>`;
+      personasVisibles.forEach((persona) => {
         const estado = obtenerEstadoReserva(persona);
-        contenido += `<div class="${estado.calendarioClase} text-white rounded p-1 mb-1 small">${escapeHtml(persona.nombre)}</div>`;
+        contenido += `
+          <div class="calendar-booking ${estado.calendarioClase} text-white rounded p-1 mb-1 small"
+               title="${escapeHtml(`${persona.nombre} - DNI ${persona.dni} - Tel. ${persona.telefono} - ${estado.texto}`)}">
+            ${escapeHtml(persona.nombre)}
+            <small>DNI ${escapeHtml(persona.dni)}</small>
+          </div>
+        `;
       });
-      fila += `<td class="${feriado ? "table-warning" : ""}">${contenido}</td>`;
+      fila += `<td class="calendar-cell ${[feriado ? "table-warning" : "", esHoy ? "calendar-cell-today" : ""].filter(Boolean).join(" ")}">${contenido}</td>`;
     });
     fila += "</tr>";
     tabla.innerHTML += fila;
@@ -1328,8 +1403,8 @@ async function cargarCalendario() {
 
 async function confirmarAsistencia() {
   const dni = document.getElementById("dniInput").value.trim();
-  if (!dni) return alert("Ingresá DNI");
-  if (!horaAsistenciaHoy) return alert("No hay clase pendiente para hoy");
+  if (!dni) return mostrarToast("Ingresá DNI", "warning");
+  if (!horaAsistenciaHoy) return mostrarToast("No hay clase pendiente para hoy", "warning");
 
   const res = await fetch("/asistencia", {
     method: "POST",
@@ -1337,7 +1412,7 @@ async function confirmarAsistencia() {
     body: JSON.stringify({ dni, hora: horaAsistenciaHoy })
   });
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
   if (res.ok) await cargarReservas();
 }
 
@@ -1464,7 +1539,7 @@ function crearItemsHistorial(
 
 function mostrarClases(dni) {
   const lista = clientesGlobal[String(dni)] || [];
-  if (!lista.length) return alert("No hay clases para ese cliente");
+  if (!lista.length) return mostrarToast("No hay clases para ese cliente", "warning");
 
   const panel = document.getElementById("panelClasesBuscado");
   if (!panel) return;
@@ -1637,13 +1712,13 @@ async function buscarCliente() {
 function renovarCliente(dni) {
   const lista = clientesGlobal[String(dni)] || [];
   if (!lista.length) {
-    alert("Cliente no encontrado");
+    mostrarToast("Cliente no encontrado", "danger");
     return;
   }
 
   const pendientes = lista.filter((reserva) => String(reserva.asistida) === "0").length;
   if (pendientes > 0) {
-    alert("Primero tiene que terminar el pack actual para poder renovarlo.");
+    mostrarToast("Primero tiene que terminar el pack actual para poder renovarlo.", "warning");
     return;
   }
 
@@ -1653,7 +1728,7 @@ function renovarCliente(dni) {
   if (nuevoPack === null) return;
 
   if (!["4", "8", "12", "16"].includes(nuevoPack.trim())) {
-    alert("Pack inválido");
+    mostrarToast("Pack inválido", "warning");
     return;
   }
 
@@ -1675,33 +1750,120 @@ function renovarCliente(dni) {
   window.location.href = `/reservar?${params.toString()}`;
 }
 
-async function reprogramarClase(id) {
-  const nuevaFecha = prompt("Nueva fecha (AAAA-MM-DD):");
-  if (!nuevaFecha) return;
+async function actualizarHorariosReprogramacion() {
+  const fechaInput = document.getElementById("reprogramarFecha");
+  const horaSelect = document.getElementById("reprogramarHora");
+  const avisoFeriado = document.getElementById("reprogramarFeriadoAviso");
+  if (!fechaInput || !horaSelect || !avisoFeriado) return;
 
-  const nuevaHora = prompt("Nueva hora (HH:MM):");
-  if (!nuevaHora) return;
+  const fecha = fechaInput.value;
+  horaSelect.innerHTML = `<option value="">Elegí una fecha primero</option>`;
+  avisoFeriado.classList.add("d-none");
+  avisoFeriado.textContent = "";
 
-  const feriado = await obtenerFeriadoFecha(nuevaFecha.trim());
+  if (!fecha) return;
+
+  if (esFinDeSemana(fecha)) {
+    horaSelect.innerHTML = `<option value="">No hay clases sábados ni domingos</option>`;
+    return;
+  }
+
+  const feriado = await obtenerFeriadoFecha(fecha);
+  if (feriado) {
+    avisoFeriado.classList.remove("d-none");
+    avisoFeriado.textContent = `${formatearFecha(feriado.fecha)} es feriado: ${feriado.nombre}. Podés reprogramar igual si el estudio abre.`;
+  }
+
+  horaSelect.innerHTML = `<option value="">Elegí horario</option>`;
+  horarios.forEach((hora) => {
+    const ocupadas = contarReservasEnHorario(fecha, hora, reprogramarClaseContexto?.id);
+    const disponible = ocupadas < 4;
+    const option = document.createElement("option");
+    option.value = disponible ? hora : "";
+    option.textContent = disponible ? `${hora} (${ocupadas}/4 cupos)` : `${hora} (completo)`;
+    option.disabled = !disponible;
+    horaSelect.appendChild(option);
+  });
+
+  if (reprogramarClaseContexto?.hora) {
+    const opcionActual = Array.from(horaSelect.options).find((option) => option.value === reprogramarClaseContexto.hora);
+    if (opcionActual && fecha === reprogramarClaseContexto.dia) {
+      horaSelect.value = reprogramarClaseContexto.hora;
+    }
+  }
+}
+
+async function abrirModalReprogramarClase(id) {
+  const reserva = obtenerReservaPorId(id);
+  if (!reserva) {
+    mostrarToast("No se encontró la clase para reprogramar.", "danger");
+    return;
+  }
+
+  reprogramarClaseContexto = reserva;
+  document.getElementById("reprogramarClaseId").value = reserva.id;
+  document.getElementById("reprogramarFecha").value = reserva.dia;
+  document.getElementById("reprogramarClaseResumen").textContent =
+    `${reserva.nombre} - clase actual ${formatearFecha(reserva.dia)} a las ${reserva.hora}`;
+
+  await actualizarHorariosReprogramacion();
+  document.getElementById("reprogramarHora").value = reserva.hora;
+  reprogramarClaseModalInstance?.show();
+}
+
+async function guardarReprogramacionClase(event) {
+  event.preventDefault();
+
+  const id = document.getElementById("reprogramarClaseId").value;
+  const dia = document.getElementById("reprogramarFecha").value;
+  const hora = document.getElementById("reprogramarHora").value;
+  const guardarBtn = document.getElementById("reprogramarGuardarBtn");
+
+  if (!id || !dia || !hora) {
+    mostrarToast("Completá fecha y horario para reprogramar.", "warning");
+    return;
+  }
+
+  if (esFinDeSemana(dia)) {
+    mostrarToast("Los sábados y domingos no hay clases.", "warning");
+    return;
+  }
+
+  const ocupadas = contarReservasEnHorario(dia, hora, id);
+  if (ocupadas >= 4) {
+    mostrarToast("Ese horario ya está completo.", "danger");
+    await actualizarHorariosReprogramacion();
+    return;
+  }
+
+  const feriado = await obtenerFeriadoFecha(dia);
   if (feriado && !confirm(`${formatearFecha(feriado.fecha)} es feriado: ${feriado.nombre}. ¿Querés reprogramar la clase igual?`)) {
     return;
   }
 
+  guardarBtn.disabled = true;
+  guardarBtn.textContent = "Guardando...";
+
   const res = await fetch("/reprogramar", {
     method: "POST",
     ...opcionesFetch,
-    body: JSON.stringify({ id, dia: nuevaFecha, hora: nuevaHora })
+    body: JSON.stringify({ id, dia, hora })
   });
 
   const msg = await res.text();
-  alert(msg);
-  if (res.ok) {
-    await cargarReservas();
-    const dni = document.getElementById("dniInput").value.trim();
-    if (dni) {
-      await buscarCliente();
-      mostrarClases(dni);
-    }
+  mostrarResultadoHttp(msg, res.ok);
+
+  guardarBtn.disabled = false;
+  guardarBtn.textContent = "Guardar cambio";
+
+  if (!res.ok) return;
+
+  reprogramarClaseModalInstance?.hide();
+  await cargarReservas();
+  const dni = document.getElementById("dniInput").value.trim();
+  if (dni) {
+    await buscarCliente();
+    mostrarClases(dni);
   }
 }
 
@@ -1713,7 +1875,7 @@ async function marcarAsistenciaClase(id) {
   });
 
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
 
   if (!res.ok) return;
 
@@ -1738,7 +1900,7 @@ async function marcarAusenciaClase(id, fecha, hora) {
   });
 
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
 
   if (!res.ok) return;
 
@@ -1791,7 +1953,7 @@ async function agregarListaEspera(event) {
   });
 
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
 
   if (!res.ok) return;
 
@@ -1812,7 +1974,7 @@ async function eliminarListaEspera(id, nombre) {
   });
 
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
 
   if (!res.ok) return;
   await cargarListaEspera();
@@ -1830,7 +1992,7 @@ async function eliminarCliente(dni, nombre) {
   });
 
   if (res.ok) {
-    alert("Cliente eliminado correctamente");
+    mostrarToast("Cliente eliminado correctamente", "success");
     horaAsistenciaHoy = "";
     document.getElementById("infoCliente").innerHTML = "";
     document.getElementById("clienteBuscadoTabla").innerHTML = "";
@@ -1838,7 +2000,7 @@ async function eliminarCliente(dni, nombre) {
     document.getElementById("btnAsistencia").style.display = "none";
     await cargarReservas();
   } else {
-    alert("Error al eliminar cliente");
+    mostrarToast("Error al eliminar cliente", "danger");
   }
 }
 
@@ -1857,7 +2019,7 @@ async function editarCliente(dniActual, nombreActual, telefonoActual) {
   const telefonoLimpio = telefono.trim();
 
   if (!nombreLimpio || !dniLimpio || !telefonoLimpio) {
-    return alert("Todos los datos son obligatorios");
+    return mostrarToast("Todos los datos son obligatorios", "warning");
   }
 
   const res = await fetch("/editar-cliente", {
@@ -1872,7 +2034,7 @@ async function editarCliente(dniActual, nombreActual, telefonoActual) {
   });
 
   const text = await res.text();
-  alert(text);
+  mostrarResultadoHttp(text, res.ok);
 
   if (!res.ok) return;
 
@@ -1903,6 +2065,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (eliminarPagoModalElement && window.bootstrap) {
     eliminarPagoModalInstance = new bootstrap.Modal(eliminarPagoModalElement);
   }
+  const reprogramarClaseModalElement = document.getElementById("reprogramarClaseModal");
+  if (reprogramarClaseModalElement && window.bootstrap) {
+    reprogramarClaseModalInstance = new bootstrap.Modal(reprogramarClaseModalElement);
+  }
   cargarReservas();
 
   document.getElementById("filtroBusqueda")?.addEventListener("input", pintarClientes);
@@ -1914,6 +2080,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("esperaDia")?.addEventListener("change", actualizarAvisoFeriadoListaEspera);
   document.getElementById("formPago")?.addEventListener("submit", registrarPago);
   document.getElementById("editarPagoForm")?.addEventListener("submit", editarPagoDesdeModal);
+  document.getElementById("reprogramarClaseForm")?.addEventListener("submit", guardarReprogramacionClase);
+  document.getElementById("reprogramarFecha")?.addEventListener("change", actualizarHorariosReprogramacion);
   document.getElementById("confirmarEliminarPagoBtn")?.addEventListener("click", eliminarPagoDesdeModal);
   document.getElementById("logoutBtn")?.addEventListener("click", cerrarSesion);
   document.getElementById("pagoBusquedaCliente")?.addEventListener("input", renderizarBusquedasPago);
@@ -1927,6 +2095,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 document.getElementById("btnSemanaAnt").addEventListener("click", () => cambiarSemana(-1));
 document.getElementById("btnSemanaAct").addEventListener("click", irSemanaActual);
+document.getElementById("btnCalendarioHoy").addEventListener("click", irSemanaActual);
 document.getElementById("btnSemanaSig").addEventListener("click", () => cambiarSemana(1));
 document.getElementById("buscarClienteBtn").addEventListener("click", buscarCliente);
 document.getElementById("btnAsistencia").addEventListener("click", confirmarAsistencia);
@@ -1995,7 +2164,7 @@ document.addEventListener("click", (event) => {
   }
 
   if (action === "reprogramar-clase") {
-    reprogramarClase(button.dataset.id);
+    abrirModalReprogramarClase(button.dataset.id);
     return;
   }
 
